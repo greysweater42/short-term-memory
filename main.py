@@ -30,28 +30,46 @@ class EEGDataset(Dataset):
 
     def _get_one_item(self, file):
         label = self.mapping[file.parent.name]
-        data = pd.read_csv(file).to_numpy()[:1500].transpose().astype(np.float32)
+        data = pd.read_csv(file).to_numpy()[:3000].transpose().astype(np.float32)
         return torch.tensor(data), label
+
+    def get_weighted_sampler(self):
+        labels = [self.mapping[file.parent.name] for file in self.files]
+        counts = np.unique(labels, return_counts=True)[1]
+        weights_classes = 1 / (counts / sum(counts))
+        weights_classes /= sum(weights_classes)
+        weights = [weights_classes[x] for x in labels]
+        sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
+        return sampler
 
 
 train_dataset = EEGDataset("/home/tomek/nauka/mne/data/train")
 test_dataset = EEGDataset("/home/tomek/nauka/mne/data/test")
-train_loader = DataLoader(train_dataset, batch_size=10, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=10, shuffle=True)
+
+sampler = train_dataset.get_weighted_sampler()
+train_loader = DataLoader(train_dataset, batch_size=100, sampler=sampler)
+test_loader = DataLoader(test_dataset, batch_size=100, shuffle=True)
 
 
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.cnn = nn.Conv1d(22, 100, 3, stride=1)
+        self.kernels = [50, 100, 150]
+        self.cnn_size = 247
+        self.cnn = nn.Sequential(
+            nn.Conv1d(21, self.kernels[0], 7, stride=3),
+            nn.Conv1d(self.kernels[0], self.kernels[1], 5, stride=2),
+            nn.Conv1d(self.kernels[1], self.kernels[-1], 5, stride=2),
+        )
+        data, _ = train_dataset[0]
+        self.cnn(data.unsqueeze(0)).shape
         self.classifier = nn.Sequential(
-            nn.Linear(149800, 1),
-            nn.Sigmoid()
+            nn.Linear(self.cnn_size * self.kernels[-1], 1), nn.Sigmoid()
         )
 
     def forward(self, x):
         x = self.cnn(x)
-        return self.classifier(x.view(-1, 149800))
+        return self.classifier(x.view(-1, self.cnn_size * self.kernels[-1]))
 
 
 net = Net()
@@ -60,11 +78,11 @@ net = Net()
 device = "cuda"
 net = Net()
 net.to(device)
-optimizer = torch.optim.Adam(net.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.5)
 criterion = nn.BCEWithLogitsLoss()
 
 
-for i in tqdm(range(3), desc="epoch", position=1):
+for i in tqdm(range(15), desc="epoch", position=1):
     correct = 0
     for inputs, labels in tqdm(train_loader, desc="training", position=0):
         outputs = net(inputs.to(device))
@@ -72,14 +90,21 @@ for i in tqdm(range(3), desc="epoch", position=1):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        correct += sum(outputs.view(-1).to('cpu') == labels.to('cpu'))
+        correct += sum(outputs.view(-1).to("cpu") == labels.to("cpu"))
     print(f"\ntraining accuracy: {correct / len(train_dataset) * 100}%")
 
-    correct = 0
-    for inputs, labels in tqdm(test_loader, desc="testing"):
-        outputs = net(inputs.to(device))
-        correct += sum(outputs.view(-1).to('cpu') == labels.to('cpu'))
-    print(f"\ntesting accuracy: {correct / len(test_dataset) * 100}%")
+    # correct = 0
+    # for inputs, labels in tqdm(test_loader, desc="testing"):
+    #     outputs = net(inputs.to(device))
+    #     correct += sum(outputs.view(-1).to("cpu") == labels.to("cpu"))
+    # print(f"\ntesting accuracy: {correct / len(test_dataset) * 100}%")
+    # print(f"all positives accuracy: {848 / (848 + 96)}")
 
 
 # %%
+
+# train_path = "/home/tomek/nauka/mne/data/train"
+# test_path = "/home/tomek/nauka/mne/data/test"
+
+# files = list(Path(test_path).rglob("*.csv"))
+# np.unique(np.array([path.parent.name for path in files]), return_counts=True)

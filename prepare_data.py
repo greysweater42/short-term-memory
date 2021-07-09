@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
+
 # %%
 
 
@@ -13,15 +14,15 @@ sep_data = []
 
 for path in tqdm(list(PATH.glob("sub*"))):
     eeg_data = EEGData(person=path.name)
-    person_labels, person_data = eeg_data.prepare_dataset("5R")
+    person_labels, person_data = eeg_data.prepare_dataset(["5R", "5M"], ["delay"])
     sep_labels.append(person_labels)
     sep_data.append(person_data)
 
 data = pd.concat(sep_data)
 labels = pd.concat(sep_labels)
 # %%
-data.to_csv("data.csv", index=False)
-labels.to_csv("labels.csv", index=False)
+# data.to_csv("data.csv", index=False)
+# labels.to_csv("labels.csv", index=False)
 
 # %%
 np.random.seed(42)
@@ -44,7 +45,25 @@ for person in tqdm(range(1, n_persons + 1)):
     sub_labels = labels[labels.person == person]
     s = "test" if person in test_persons else "train"
     for trial in range(sub_data["trial"].max()):
-        trial_data = sub_data[sub_data.trial == trial].drop(["trial", "person"], axis=1)
+        trial_data = sub_data[sub_data.trial == trial].drop(
+            ["trial", "person", "phase"], axis=1
+        )
         trial_labels = sub_labels.loc[sub_labels.trial == trial, "label"]
         v = "error" if trial_labels.iloc[0] == 0 else "correct"
-        trial_data.to_csv(Path("data") / s / v / f"{person}_{trial}.csv")
+        trial_data.to_csv(Path("data") / s / v / f"{person}_{trial}.csv", index=False)
+
+# %%
+# from sklearn import decomposition
+# from datetime import datetime
+# import pandas as pd
+
+# train_data = []
+# path = "/home/tomek/nauka/mne/data/train"
+# files = list(Path(path).rglob("*.csv"))
+# for file in files:
+#     train_data.append(pd.read_csv(file))
+
+# data = pd.concat(train_data)
+# pca = decomposition.PCA(n_components=10)
+# pca.fit(data)
+# np.cumsum(pca.explained_variance_ratio_)
