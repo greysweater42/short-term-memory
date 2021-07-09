@@ -47,22 +47,26 @@ train_dataset = EEGDataset("/home/tomek/nauka/mne/data/train")
 test_dataset = EEGDataset("/home/tomek/nauka/mne/data/test")
 
 sampler = train_dataset.get_weighted_sampler()
-train_loader = DataLoader(train_dataset, batch_size=100, sampler=sampler)
-test_loader = DataLoader(test_dataset, batch_size=100, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=10, sampler=sampler)
+test_loader = DataLoader(test_dataset, batch_size=10, shuffle=True)
 
 
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.kernels = [50, 100, 150]
-        self.cnn_size = 247
+        self.kernels = [50, 100, 150, 300, 500, 700, 900]
+        self.cnn_size = 184
         self.cnn = nn.Sequential(
-            nn.Conv1d(21, self.kernels[0], 7, stride=3),
-            nn.Conv1d(self.kernels[0], self.kernels[1], 5, stride=2),
-            nn.Conv1d(self.kernels[1], self.kernels[-1], 5, stride=2),
+            nn.Conv1d(21, self.kernels[0], 3, stride=1),
+            nn.Conv1d(self.kernels[0], self.kernels[1], 3, stride=1),
+            nn.Conv1d(self.kernels[1], self.kernels[2], 3, stride=1),
+            nn.Conv1d(self.kernels[2], self.kernels[3], 5, stride=2),
+            nn.Conv1d(self.kernels[3], self.kernels[4], 5, stride=2),
+            nn.Conv1d(self.kernels[4], self.kernels[5], 5, stride=2),
+            nn.Conv1d(self.kernels[5], self.kernels[6], 5, stride=2),
         )
-        data, _ = train_dataset[0]
-        self.cnn(data.unsqueeze(0)).shape
+        # data, _ = train_dataset[0]
+        # print(self.cnn(data.unsqueeze(0)).shape)
         self.classifier = nn.Sequential(
             nn.Linear(self.cnn_size * self.kernels[-1], 1), nn.Sigmoid()
         )
@@ -78,11 +82,11 @@ net = Net()
 device = "cuda"
 net = Net()
 net.to(device)
-optimizer = torch.optim.Adam(net.parameters(), lr=0.5)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.1)
 criterion = nn.BCEWithLogitsLoss()
 
 
-for i in tqdm(range(15), desc="epoch", position=1):
+for i in tqdm(range(5), desc="epoch", position=1):
     correct = 0
     for inputs, labels in tqdm(train_loader, desc="training", position=0):
         outputs = net(inputs.to(device))
