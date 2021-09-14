@@ -1,25 +1,37 @@
-from pathlib import Path
 import mne
 import pandas as pd
 import numpy as np
 
 
 mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
-PATH = Path("/home/tomek/doktorat/ds003655-download/")
 
 
-class EEGData:
-    def __init__(self, person):
+class ShortTermMemoryEEGRawData:
+    def __init__(self, path, person):
+        """path for processing raw eeg data for short-term memory eeg data
+
+        Arguments:
+            path {pathlib.Path} -- path where the data is stored
+            person {str} -- id of a person, e.g. sub-001
+        """
         self.eeg = None
         self.events = None
         self.person = int(person[-3:])
-        person_path = PATH / person / "eeg"
+        self.experiments = []
+        self.channels_path = None
+        self.data_path = None
+        self.events_path = None
+
+        self._create_paths(path=path, person=person)
+        self._load_data()
+
+    def _create_paths(self, path, person):
+        person_path = path / person / "eeg"
         channels_file = f"{person}_task-VerbalWorkingMemory_channels.tsv"
         self.channels_path = person_path / channels_file
         self.data_path = person_path / f"{person}_task-VerbalWorkingMemory_eeg.set"
         events_file = f"{person}_task-VerbalWorkingMemory_events.tsv"
         self.events_path = person_path / events_file
-        self._load_data()
 
     def _load_data(self):
         channels = pd.read_csv(self.channels_path, sep="\t")
@@ -42,6 +54,7 @@ class EEGData:
         # ["5R", "5M", "6R", "6M", "7R", "7M"]
         possible_experiments = set(f"{x}{y}" for x in [5, 6, 7] for y in ["R", "M"])
         assert set(experiments).issubset(possible_experiments)
+        self.experiments = experiments
         # iterating over dataset is a very primitive method, but the data is so dirty it
         # must be done this way
         trials = []
@@ -70,17 +83,22 @@ class EEGData:
                     continue
                 trial["end"] = row["onset"]
                 trial["experiment"] = row["trial_type"][10:12]
+                if trial["experiment"] not in experiments:
+                    continue
                 trial["label"] = 1 if "correct" in row["trial_type"] else 0
-                assert trial["start"] < trial["encoding"]
-                assert trial["encoding"] < trial["delay"]
-                assert trial["delay"] < trial["probe"]
-                assert trial["probe"] < trial["end"]
-                if len(trial) == 7:
-                    trials.append(trial)
+                self._run_trial_checks(trial)
+                trials.append(trial)
                 trial = {}
 
-        trials = [x for x in trials if x["experiment"] in experiments]
         return trials
+
+    @staticmethod
+    def _run_trial_checks(trial):
+        assert trial["start"] < trial["encoding"]
+        assert trial["encoding"] < trial["delay"]
+        assert trial["delay"] < trial["probe"]
+        assert trial["probe"] < trial["end"]
+        assert len(trial) == 7
 
     def _extract_eeg(self, events, phases):
         bins = [
@@ -106,7 +124,9 @@ class EEGData:
 
         labels = pd.DataFrame(
             {
-                "label": [x["label"] for x in events],
+                "label": [
+                    1 if x["experiment"] == self.experiments[0] else 0 for x in events
+                ],
                 "trial": range(len(events)),
                 "person": self.person,
             }
