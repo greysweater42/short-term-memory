@@ -3,16 +3,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List
 from itertools import product
-from scipy.fft import fft, fftfreq
+from scipy.fft import fft, fftfreq, ifft
 
 import mne
 import numpy as np
 import pandas as pd
 import pyarrow.feather as feather
-
-
-def _recursive_defaultdict():
-    return defaultdict(_recursive_defaultdict)
+from tqdm import tqdm
+from multiprocessing import Pool, cpu_count
 
 
 mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
@@ -44,41 +42,49 @@ ELECTRODES = [
 ]
 
 
+def _recursive_defaultdict():
+    return defaultdict(_recursive_defaultdict)
+
+
+def _load_clean_write_raw_data(person: int):
+    raw_ds = EEGRawDataset()
+    eeg = raw_ds.load_and_clean_data(person=person)
+    for exp_type, times in eeg.items():
+        for exp_time, response_types in times.items():
+            for response_type, trials in response_types.items():
+                for trial, phases in trials.items():
+                    for phase, data in phases.items():
+                        filename = phase + ".feather"
+                        path = (
+                            DATA_CACHE_PATH
+                            / str(person)
+                            / exp_type
+                            / str(exp_time)
+                            / response_type
+                            / str(trial)
+                        )
+                        path.mkdir(parents=True, exist_ok=True)
+                        feather.write_feather(data, path / filename)
+
+
 class Dataset:
     def __init__(self):
+        pass
+
+    def write_data_cache(self, cpus: int = None):
+        if not cpus:
+            cpus = cpu_count() // 2
         ps = [
             int(p.stem[4:]) for p in DATA_RAW_PATH.iterdir() if p.stem.startswith("sub")
         ]
-        self.persons = sorted(ps)
-
-    def write_data_cache(self):
+        persons = sorted(ps)
         if DATA_CACHE_PATH.exists():
             shutil.rmtree(DATA_CACHE_PATH)
         Path.mkdir(DATA_CACHE_PATH)
-        # TODO multiprocessing
-        for person in self.persons:
-            print(person)
-            self._load_clean_write_raw_data(person=person)
 
-    def _load_clean_write_raw_data(self, person: int):
-        raw_ds = EEGRawDataset()
-        eeg = raw_ds.load_and_clean_data(person=person)
-        for exp_type, times in eeg.items():
-            for exp_time, response_types in times.items():
-                for response_type, trials in response_types.items():
-                    for trial, phases in trials.items():
-                        for phase, data in phases.items():
-                            filename = phase + ".feather"
-                            path = (
-                                DATA_CACHE_PATH
-                                / str(person)
-                                / exp_type
-                                / str(exp_time)
-                                / response_type
-                                / str(trial)
-                            )
-                            path.mkdir(parents=True, exist_ok=True)
-                            feather.write_feather(data, path / filename)
+        with Pool(2) as executor:
+            results = executor.imap(_load_clean_write_raw_data, persons)
+            [_ for _ in tqdm(results, total=len(persons))]
 
     def get_data(
         self,
@@ -88,7 +94,7 @@ class Dataset:
         phases: List[str] = ["encoding", "delay"],
         electrodes: List[str] = ELECTRODES,
         domain: str = "time",
-        epoch_length: float = 0
+        epoch_length: float = 0,
     ):
         assert domain in ["time", "freq"]
         data = []
@@ -101,19 +107,19 @@ class Dataset:
                 d = feather.read_feather(path)[electrodes]
                 if epoch_length:
                     time = np.arange(0, len(d) / 500, 0.002)
-                    d['epoch'] = np.floor(time / epoch_length).astype(int)
+                    d["epoch"] = np.floor(time / epoch_length).astype(int)
                 else:
                     d["epoch"] = 0
                 ds = []
                 # TODO multiprocessing
-                for _, dee in d.groupby('epoch'):
-                    if len(d[d['epoch'] == 0]) < len(dee):  # remove last short epoch
+                for _, dee in d.groupby("epoch"):
+                    if len(d[d["epoch"] == 0]) < len(dee):  # remove last short epoch
                         continue
                     de = dee.drop("epoch", axis=1)
                     if domain == "freq":
                         de = self._transform_fourier_columnwise(de)
                     else:
-                        de['time'] = np.arange(0, len(de) / 500, 0.002)
+                        de["time"] = np.arange(0, len(de) / 500, 0.002)
                     ds.append(de)
                 data.append(ds)
                 dictionary.append(path.parts[-6:])
@@ -155,6 +161,7 @@ class EEGRawDataset:
         self.person = person
         self.person_str = self._make_person_str(person)
         self._load_data()
+        self._remove_50_Hz_from_eeg()
         self._extract_trials()
         eeg = self._extract_eeg()
         return eeg
@@ -172,6 +179,15 @@ class EEGRawDataset:
 
         events_path = path / self.files["events"].format(self.person_str)
         self._events = pd.read_csv(events_path, sep="\t")
+
+    def _remove_50_Hz_from_eeg(self):
+        freq = fftfreq(len(self._eeg), 0.002)  # 500Hz -> 0.002
+        for c in self._eeg.columns:
+            y_fft = fft(self._eeg[c].to_numpy()).real
+            y_fft[(np.abs(freq) > 49) & (np.abs(freq) < 51)] = 0
+            y_fft[(np.abs(freq) > 99) & (np.abs(freq) < 101)] = 0
+            y_fft[(np.abs(freq) > 149) & (np.abs(freq) < 151)] = 0
+            self._eeg[c] = ifft(y_fft).real
 
     @staticmethod
     def _filter_func(start, end):
