@@ -1,5 +1,7 @@
-import pandas as pd
 import numpy as np
+from pathlib import Path
+from xgboost import XGBClassifier
+import pandas as pd
 from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -8,7 +10,6 @@ from collections import namedtuple
 
 
 class Dataset:
-
     def __init__(self, path, ds_types):
         self.path = path
         self.ds_types = ds_types
@@ -40,7 +41,7 @@ class Dataset:
 
         X = pd.DataFrame(ys)
         y = np.array([1 if lb == "correct" else 0 for lb in labels])
-        ds = namedtuple(ds_type, 'X y')
+        ds = namedtuple(ds_type, "X y")
         return ds(X=X, y=y)
 
 
@@ -71,3 +72,13 @@ class SpectralAnalysis:
         plt.show()
 
 
+ds = Dataset(Path("./data"), ["train", "test"])
+ds.prepare_datasets()
+
+xgb = XGBClassifier(max_depth=2)
+xgb.fit(ds.train.X, ds.train.y)
+
+y_train_hat = xgb.predict(ds.train.X)
+np.mean(y_train_hat == ds.train.y)
+y_test_hat = xgb.predict(ds.test.X)
+np.mean(y_test_hat == ds.test.y)
