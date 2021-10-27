@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 from itertools import product
 from scipy.fft import fft, fftfreq, ifft
+from concurrent import futures
 
 import mne
 import numpy as np
@@ -54,17 +55,75 @@ def _load_clean_write_raw_data(person: int):
             for response_type, trials in response_types.items():
                 for trial, phases in trials.items():
                     for phase, data in phases.items():
-                        filename = phase + ".feather"
-                        path = (
-                            DATA_CACHE_PATH
-                            / str(person)
-                            / exp_type
-                            / str(exp_time)
-                            / response_type
-                            / str(trial)
+                        ob = Observation(
+                            person=person,
+                            experiment_type=exp_type,
+                            experiment_time=exp_time,
+                            response_type=response_type,
+                            trial=trial,
+                            phase=phase,
                         )
-                        path.mkdir(parents=True, exist_ok=True)
-                        feather.write_feather(data, path / filename)
+                        ob.write_data(data)
+
+
+class Observation:
+    def __init__(
+        self, person, experiment_type, experiment_time, response_type, trial, phase
+    ):
+        self.person = int(person)
+        self.experiment_type = experiment_type
+        self.experiment_time = int(experiment_time)
+        self.response_type = response_type
+        self.trial = int(trial)
+        self.phase = phase
+        self.path = (
+            DATA_CACHE_PATH
+            / str(self.person)
+            / self.experiment_type
+            / str(self.experiment_time)
+            / self.response_type
+            / str(self.trial)
+            / self.phase
+        ).with_suffix(".feather")
+        self.data = None
+        self.electrodes = None
+
+    def __repr__(self):
+        return f"""Observation
+    person: {self.person}
+    experiment type: {self.experiment_type}
+    experiment time: {self.experiment_time}
+    response type: {self.response_type}
+    trial: {self.trial}
+    phase: {self.phase}
+    electrodes: {self.electrodes}
+    example data: 
+    {self.data.loc[:5]}
+        """
+
+    def make_parent_dir(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def write_data(self, df):
+        feather.write_feather(df, self.path)
+
+    def read_data(self, electrodes):
+        self.data = feather.read_feather(self.path)
+        self.data["time"] = np.arange(0, len(self.data) / 500, 0.002)
+        self.data = self.data[electrodes]
+        self.electrodes = electrodes
+        return self
+
+    @property
+    def pd_repr(self):
+        return dict(
+            person=self.person,
+            experiment_type=self.experiment_type,
+            experiment_time=self.experiment_time,
+            response_type=self.response_type,
+            trial=self.trial,
+            phase=self.phase,
+        )
 
 
 class Dataset:
@@ -94,18 +153,16 @@ class Dataset:
         phases: List[str] = ["encoding", "delay"],
         electrodes: List[str] = ELECTRODES,
     ):
-        data = []
-        dictionary = []
+        all_obs = []
         combs = product(exp_types, exp_times, response_types, phases)
         for exp_type, exp_time, response_type, phase in combs:
             regex = f"*/{exp_type}/{exp_time}/{response_type}/*/{phase}.feather"
             paths = Path(DATA_CACHE_PATH).rglob(regex)
-            for path in paths:
-                df = feather.read_feather(path)[electrodes]
-                df["time"] = np.arange(0, len(df) / 500, 0.002)
-                data.append(df)
-                dictionary.append(path.parts[-6:])
-        return data, dictionary
+            obs = [Observation(*p.with_suffix("").parts[-6:]) for p in paths]
+            all_obs += obs
+        with futures.ThreadPoolExecutor(max_workers=1) as executor:
+            results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
+        return [r for r in results]
 
 
 class EEGRawDataset:
