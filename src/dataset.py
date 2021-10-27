@@ -93,10 +93,7 @@ class Dataset:
         response_types: List[str] = ["correct", "error"],
         phases: List[str] = ["encoding", "delay"],
         electrodes: List[str] = ELECTRODES,
-        domain: str = "time",
-        epoch_length: float = 0,
     ):
-        assert domain in ["time", "freq"]
         data = []
         dictionary = []
         combs = product(exp_types, exp_times, response_types, phases)
@@ -104,35 +101,11 @@ class Dataset:
             regex = f"*/{exp_type}/{exp_time}/{response_type}/*/{phase}.feather"
             paths = Path(DATA_CACHE_PATH).rglob(regex)
             for path in paths:
-                d = feather.read_feather(path)[electrodes]
-                if epoch_length:
-                    time = np.arange(0, len(d) / 500, 0.002)
-                    d["epoch"] = np.floor(time / epoch_length).astype(int)
-                else:
-                    d["epoch"] = 0
-                ds = []
-                # TODO multiprocessing
-                for _, dee in d.groupby("epoch"):
-                    if len(d[d["epoch"] == 0]) < len(dee):  # remove last short epoch
-                        continue
-                    de = dee.drop("epoch", axis=1)
-                    if domain == "freq":
-                        de = self._transform_fourier_columnwise(de)
-                    else:
-                        de["time"] = np.arange(0, len(de) / 500, 0.002)
-                    ds.append(de)
-                data.append(ds)
+                df = feather.read_feather(path)[electrodes]
+                df["time"] = np.arange(0, len(df) / 500, 0.002)
+                data.append(df)
                 dictionary.append(path.parts[-6:])
         return data, dictionary
-
-    @staticmethod
-    def _transform_fourier_columnwise(df):
-        for c in df:
-            df[c] = np.abs(fft(df[c].to_numpy()).real)
-        freq = fftfreq(len(df), 0.002)[: len(df) // 2]  # 500Hz -> 0.002
-        df = df[: (len(df) // 2)].copy()
-        df["freq"] = freq
-        return df
 
 
 class EEGRawDataset:
