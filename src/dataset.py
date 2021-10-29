@@ -118,21 +118,30 @@ class Observation:
         return self
 
     def wavelet_transform(self):
-        s = np.arange(2, 60)  # from 2 to 60Hz
+        freqs = np.arange(1, 51)  # from 2 to 60Hz
+        scales = 400 / freqs  # 400 specific for morlet wavelet
         for c in self.data.columns:
             y = self.data[c].to_numpy()
-            coefficients, _ = pywt.cwt(y, s, "morl", 0.002)
-            self.wavelets[c] = coefficients
+            coefficiecnts, frequencies = pywt.cwt(y, scales, "morl", 0.002)
+            self.wavelets[c] = dict()
+            self.wavelets[c]["c"] = coefficiecnts
+            self.wavelets[c]["f"] = frequencies
 
-    def plot_wavelets(self, electrode, smooth=400):
-        x = self.moving_average(np.abs(self.wavelets[electrode]), smooth)
-        plt.imshow(x, aspect="auto", interpolation="bessel")
+    def plot_wavelets(self, e, smooth=200):
+        c, f = self.wavelets[e]["c"].copy(), self.wavelets[e]["f"].copy()
+        x = self.moving_average(np.abs(c), smooth)
+        _, ax = plt.subplots(figsize=(15, 10))
+        _ = ax.contourf(
+            smooth // 2 * 0.02 + np.arange(0, 0.002 * x.shape[1], 0.002),
+            f,
+            x * np.expand_dims(f, 1),
+        )
+        ax.set_yticks(f)
+        plt.show()
 
     @staticmethod
-    def moving_average(a, n=5):
-        ret = np.cumsum(a.T, dtype=float, axis=0)
-        ret[n:] = ret[n:] - ret[:-n]
-        return (ret[n - 1 :] / n).T
+    def moving_average(y, w):
+        return np.array([np.convolve(x, np.ones(w), "valid") / w for x in y])
 
     @property
     def pd_repr(self):
@@ -180,7 +189,7 @@ class Dataset:
             paths = Path(DATA_CACHE_PATH).rglob(regex)
             obs = [Observation(*p.with_suffix("").parts[-6:]) for p in paths]
             all_obs += obs
-        with futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with futures.ThreadPoolExecutor(max_workers=8) as executor:
             results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
         return [r for r in results]
 
