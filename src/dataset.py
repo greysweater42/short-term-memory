@@ -5,6 +5,8 @@ from typing import List
 from itertools import product
 from scipy.fft import fft, fftfreq, ifft
 from concurrent import futures
+import matplotlib.pyplot as plt
+import pywt
 
 import mne
 import numpy as np
@@ -87,6 +89,7 @@ class Observation:
         ).with_suffix(".feather")
         self.data = None
         self.electrodes = None
+        self.wavelets = dict()
 
     def __repr__(self):
         return f"""Observation
@@ -113,6 +116,23 @@ class Observation:
         self.data = self.data[electrodes]
         self.electrodes = electrodes
         return self
+
+    def wavelet_transform(self):
+        s = np.arange(2, 60)  # from 2 to 60Hz
+        for c in self.data.columns:
+            y = self.data[c].to_numpy()
+            coefficients, _ = pywt.cwt(y, s, "morl", 0.002)
+            self.wavelets[c] = coefficients
+
+    def plot_wavelets(self, electrode, smooth=400):
+        x = self.moving_average(np.abs(self.wavelets[electrode]), smooth)
+        plt.imshow(x, aspect="auto", interpolation="bessel")
+
+    @staticmethod
+    def moving_average(a, n=5):
+        ret = np.cumsum(a.T, dtype=float, axis=0)
+        ret[n:] = ret[n:] - ret[:-n]
+        return (ret[n - 1 :] / n).T
 
     @property
     def pd_repr(self):
