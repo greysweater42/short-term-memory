@@ -100,14 +100,15 @@ class Observation:
     trial: {self.trial}
     phase: {self.phase}
     electrodes: {self.electrodes}
-    example data: 
+    example data:
     {self.data.loc[:5]}
         """
 
-    def make_parent_dir(self):
+    def _make_parent_dir(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def write_data(self, df):
+        self._make_parent_dir()
         feather.write_feather(df, self.path)
 
     def read_data(self, electrodes):
@@ -132,7 +133,7 @@ class Observation:
         x = self.moving_average(np.abs(c), smooth)
         _, ax = plt.subplots(figsize=(15, 10))
         _ = ax.contourf(
-            smooth // 2 * 0.02 + np.arange(0, 0.002 * x.shape[1], 0.002),
+            smooth // 2 * 0.002 + np.arange(0, 0.002 * x.shape[1], 0.002),
             f,
             x * np.expand_dims(f, 1),
         )
@@ -170,7 +171,7 @@ class Dataset:
             shutil.rmtree(DATA_CACHE_PATH)
         Path.mkdir(DATA_CACHE_PATH)
 
-        with Pool(2) as executor:
+        with Pool(4) as executor:
             results = executor.imap(_load_clean_write_raw_data, persons)
             [_ for _ in tqdm(results, total=len(persons))]
 
@@ -220,7 +221,7 @@ class EEGRawDataset:
         self.person = person
         self.person_str = self._make_person_str(person)
         self._load_data()
-        self._remove_50_Hz_from_eeg()
+        self._apply_filters()
         self._extract_trials()
         eeg = self._extract_eeg()
         return eeg
@@ -239,13 +240,18 @@ class EEGRawDataset:
         events_path = path / self.files["events"].format(self.person_str)
         self._events = pd.read_csv(events_path, sep="\t")
 
-    def _remove_50_Hz_from_eeg(self):
+    def _apply_filters(self):
         freq = fftfreq(len(self._eeg), 0.002)  # 500Hz -> 0.002
         for c in self._eeg.columns:
             y_fft = fft(self._eeg[c].to_numpy()).real
-            y_fft[(np.abs(freq) > 49) & (np.abs(freq) < 51)] = 0
+            # 50Hz line filter
+            y_fft[(np.abs(freq) > 45) & (np.abs(freq) < 51)] = 0
             y_fft[(np.abs(freq) > 99) & (np.abs(freq) < 101)] = 0
             y_fft[(np.abs(freq) > 149) & (np.abs(freq) < 151)] = 0
+            # low-pass filter
+            y_fft[(np.abs(freq) > 45)] = 0
+            # high-pass filter
+            y_fft[(np.abs(freq) < 2)] = 0
             self._eeg[c] = ifft(y_fft).real
 
     @staticmethod
