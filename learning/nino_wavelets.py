@@ -11,16 +11,9 @@ t0 = 1871
 dt = 0.25
 time = np.arange(0, N) * dt + t0
 signal = df_nino.values.squeeze()
-
 scales = np.arange(1, 128)
 
-waveletname = "cmor"
-cmap = plt.cm.seismic
-title = "Wavelet Transform (Power Spectrum) of signal"
-ylabel = "Period (years)"
-xlabel = "Time"
-dt = time[1] - time[0]
-[coefficients, frequencies] = pywt.cwt(signal, scales, waveletname, dt)
+[coefficients, frequencies] = pywt.cwt(signal, scales, "cmor", dt)
 power = (abs(coefficients)) ** 2
 period = 1.0 / frequencies
 levels = [0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8]
@@ -28,12 +21,17 @@ contourlevels = np.log2(levels)
 
 fig, ax = plt.subplots(figsize=(15, 10))
 im = ax.contourf(
-    time, np.log2(period), np.log2(power), contourlevels, extend="both", cmap=cmap
+    time,
+    np.log2(period),
+    np.log2(power),
+    contourlevels,
+    extend="both",
+    cmap=plt.cm.seismic,
 )
 
-ax.set_title(title, fontsize=20)
-ax.set_ylabel(ylabel, fontsize=18)
-ax.set_xlabel(xlabel, fontsize=18)
+ax.set_title("Wavelet Transform (Power Spectrum) of signal", fontsize=20)
+ax.set_ylabel("Period (years)", fontsize=18)
+ax.set_xlabel("Time", fontsize=18)
 
 yticks = 2 ** np.arange(np.ceil(np.log2(period.min())), np.ceil(np.log2(period.max())))
 ax.set_yticks(np.log2(yticks))
