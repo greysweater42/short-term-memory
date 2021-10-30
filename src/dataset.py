@@ -186,7 +186,7 @@ class Observation(Wavelet):
 
 
 class Trial(Wavelet):
-    def __init__(self, observations):
+    def __init__(self, observations, phases_limits: dict = None):
         super().__init__()
         assert len(np.unique([o.electrodes for o in observations])) == 1
         assert len(np.unique([o.person for o in observations])) == 1
@@ -204,6 +204,8 @@ class Trial(Wavelet):
         for o in self.observations:
             d = o.data.copy()
             d["phase"] = o.phase
+            if phases_limits:
+                d = d.iloc[: phases_limits[o.phase]]
             raw_data.append(d)
         self.data = pd.concat(raw_data, ignore_index=True)
 
@@ -257,6 +259,8 @@ class Dataset:
         response_types: List[str] = ["correct", "error"],
         phases: List[str] = ["encoding", "delay"],
         concat_phases: bool = False,
+        level_phases: bool = False,
+        wavelet_transform: bool = False,
         electrodes: List[str] = ELECTRODES,
     ):
         all_obs = []
@@ -270,14 +274,23 @@ class Dataset:
             results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
             res = [r for r in results]
         if concat_phases:
+            phase_limits = dict()
+            if level_phases:
+                for phase in phases:
+                    len_phase = [len(r.data) for r in res if r.phase == phase]
+                    phase_limits[phase] = min(len_phase)
             persons = np.unique([r.person for r in res])
             data = []
             for p in persons:
                 d_p = [r for r in res if r.person == p]
                 trials = np.unique([p.trial for p in d_p])
                 for t in trials:
-                    data.append(Trial([o for o in d_p if o.trial == t]))
-            return data
+                    ts = Trial([o for o in d_p if o.trial == t], phase_limits)
+                    data.append(ts)
+            res = data
+        if wavelet_transform:
+            for r in tqdm(res):
+                r.wavelet_transform()
         return res
 
 
