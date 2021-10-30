@@ -43,6 +43,12 @@ ELECTRODES = [
     "EOGv",
     "EOGh",
 ]
+WAVES = dict(
+    theta=dict(min=4, mean=6, max=8),
+    alpha=dict(min=8, mean=10.5, max=13),
+    beta=dict(min=16, mean=19, max=22),
+    gamma=dict(min=35, mean=42.5, max=50),
+)
 
 
 def _recursive_defaultdict():
@@ -68,10 +74,61 @@ def _load_clean_write_raw_data(person: int):
                         ob.write_data(data)
 
 
-class Observation:
+class Wavelet:
+    def __init__(self):
+        self.data = None
+        self.wavelets = dict()
+
+    def wavelet_transform(self, freqs=None):
+        if not freqs:
+            freqs = np.arange(1, 40)  # from 1 to 40Hz
+        scales = 400 / freqs  # 400 specific for morlet wavelet
+        for c in self.data.columns[self.data.dtypes != "object"]:
+            y = self.data[c].to_numpy()
+            coefficiecnts, frequencies = pywt.cwt(y, scales, "morl", 0.002)
+            self.wavelets[c] = dict()
+            self.wavelets[c]["c"] = coefficiecnts
+            self.wavelets[c]["f"] = frequencies
+
+    def plot_wavelets(self, e, smooth=200, waves=False):
+        c, f = self.wavelets[e]["c"].copy(), self.wavelets[e]["f"].copy()
+        x = self.moving_average(np.abs(c), smooth)
+        smooth_shift = smooth // 2 * 0.002
+        _, ax = plt.subplots(figsize=(15, 10))
+        _ = ax.contourf(
+            smooth_shift + np.arange(0, 0.002 * x.shape[1], 0.002),
+            f,
+            x * np.expand_dims(f, 1),
+        )
+        if waves:
+            max_x = c.shape[1] * 0.002
+            kwargs = dict(linestyle="--", linewidth=1, color="red")
+            for name, pos in WAVES.items():
+                ax.plot([0, max_x], [pos['min'], pos['min']], **kwargs)
+                ax.text(0, pos['mean'], name, color="red")
+                ax.plot([0, max_x], [pos['max'], pos['max']], **kwargs)
+
+        ax.set_yticks(f)
+        if "phase" in self.data.columns:
+            d_idx = self.data.reset_index()
+            locations = d_idx.groupby("phase")["index"].agg(["min", "mean", "max"])
+            locations *= 0.002
+            for phase, locs in locations.iterrows():
+                ax.plot([locs["min"], locs["min"]], [f[0], f[-1]], color="black")
+                ax.text(locs["mean"], f[-5], phase, ha="center")
+                ax.plot([locs["max"], locs["max"]], [f[0], f[-1]], color="black")
+        plt.show()
+
+    @staticmethod
+    def moving_average(y, w):
+        return np.array([np.convolve(x, np.ones(w), "valid") / w for x in y])
+
+
+class Observation(Wavelet):
     def __init__(
         self, person, experiment_type, experiment_time, response_type, trial, phase
     ):
+        super().__init__()
         self.person = int(person)
         self.experiment_type = experiment_type
         self.experiment_time = int(experiment_time)
@@ -87,9 +144,7 @@ class Observation:
             / str(self.trial)
             / self.phase
         ).with_suffix(".feather")
-        self.data = None
         self.electrodes = None
-        self.wavelets = dict()
 
     def __repr__(self):
         return f"""Observation
@@ -118,32 +173,6 @@ class Observation:
         self.electrodes = electrodes
         return self
 
-    def wavelet_transform(self):
-        freqs = np.arange(1, 51)  # from 2 to 60Hz
-        scales = 400 / freqs  # 400 specific for morlet wavelet
-        for c in self.data.columns:
-            y = self.data[c].to_numpy()
-            coefficiecnts, frequencies = pywt.cwt(y, scales, "morl", 0.002)
-            self.wavelets[c] = dict()
-            self.wavelets[c]["c"] = coefficiecnts
-            self.wavelets[c]["f"] = frequencies
-
-    def plot_wavelets(self, e, smooth=200):
-        c, f = self.wavelets[e]["c"].copy(), self.wavelets[e]["f"].copy()
-        x = self.moving_average(np.abs(c), smooth)
-        _, ax = plt.subplots(figsize=(15, 10))
-        _ = ax.contourf(
-            smooth // 2 * 0.002 + np.arange(0, 0.002 * x.shape[1], 0.002),
-            f,
-            x * np.expand_dims(f, 1),
-        )
-        ax.set_yticks(f)
-        plt.show()
-
-    @staticmethod
-    def moving_average(y, w):
-        return np.array([np.convolve(x, np.ones(w), "valid") / w for x in y])
-
     @property
     def pd_repr(self):
         return dict(
@@ -154,6 +183,22 @@ class Observation:
             trial=self.trial,
             phase=self.phase,
         )
+
+
+class Trial(Wavelet):
+    def __init__(self, observations):
+        super().__init__()
+        assert len(np.unique([o.electrodes for o in observations])) == 1
+        assert len(np.unique([o.person for o in observations])) == 1
+        assert len(np.unique([o.trial for o in observations])) == 1
+        phases = ["baseline", "presentation", "encoding", "delay", "probe"]
+        self.observations = sorted(observations, key=lambda i: phases.index(i.phase))
+        raw_data = []
+        for o in self.observations:
+            d = o.data.copy()
+            d["phase"] = o.phase
+            raw_data.append(d)
+        self.data = pd.concat(raw_data, ignore_index=True)
 
 
 class Dataset:
@@ -171,7 +216,7 @@ class Dataset:
             shutil.rmtree(DATA_CACHE_PATH)
         Path.mkdir(DATA_CACHE_PATH)
 
-        with Pool(4) as executor:
+        with Pool(cpus) as executor:
             results = executor.imap(_load_clean_write_raw_data, persons)
             [_ for _ in tqdm(results, total=len(persons))]
 
@@ -260,6 +305,8 @@ class EEGRawDataset:
 
     def _extract_trials(self):
         ps = [
+            self._events["trial_type"].str.startswith("start of the baseline period"),
+            self._events["trial_type"].str.startswith("presentation"),
             self._events["trial_type"].str.startswith("encoding"),
             self._events["trial_type"].str.startswith("delay"),
             self._events["trial_type"].str.startswith("probe"),
@@ -271,18 +318,22 @@ class EEGRawDataset:
                 np.isin((ps_idx[0] + 1), ps_idx[1]),
                 np.isin((ps_idx[0] + 2), ps_idx[2]),
                 np.isin((ps_idx[0] + 3), ps_idx[3]),
+                np.isin((ps_idx[0] + 4), ps_idx[4]),
+                np.isin((ps_idx[0] + 5), ps_idx[5]),
             ]
         )
-        props = ps_idx[0][orders.sum(0) == 3]
+        props = ps_idx[0][orders.sum(0) == len(orders)]
         self._trials = pd.DataFrame(
             dict(
-                time=self._events.loc[props, "trial_type"].str[-2].to_numpy(),
-                type=self._events.loc[props, "trial_type"].str[-1].to_numpy(),
-                encoding=self._events.loc[props, "onset"].to_numpy(),
-                delay=self._events.loc[props + 1, "onset"].to_numpy(),
-                probe=self._events.loc[props + 2, "onset"].to_numpy(),
-                response=self._events.loc[props + 3, "onset"].to_numpy(),
-                response_type=self._events.loc[props + 3, "trial_type"].to_numpy(),
+                time=self._events.loc[props + 2, "trial_type"].str[-2].to_numpy(),
+                type=self._events.loc[props + 2, "trial_type"].str[-1].to_numpy(),
+                baseline=self._events.loc[props, "onset"].to_numpy(),
+                presentation=self._events.loc[props + 1, "onset"].to_numpy(),
+                encoding=self._events.loc[props + 2, "onset"].to_numpy(),
+                delay=self._events.loc[props + 3, "onset"].to_numpy(),
+                probe=self._events.loc[props + 4, "onset"].to_numpy(),
+                response=self._events.loc[props + 5, "onset"].to_numpy(),
+                response_type=self._events.loc[props + 5, "trial_type"].to_numpy(),
             )
         )
         self._trials["response_type"] = self._trials["response_type"].map(
@@ -292,7 +343,13 @@ class EEGRawDataset:
 
     def _extract_eeg(self):
         continuous_time = (np.arange(len(self._eeg)) + 1) / 500
-        phases = {"encoding": ["encoding", "delay"], "delay": ["delay", "probe"]}
+        phases = {
+            "baseline": ["baseline", "presentation"],
+            "presentation": ["presentation", "encoding"],
+            "encoding": ["encoding", "delay"],
+            "delay": ["delay", "probe"],
+            "probe": ["probe", "response"],
+        }
         eegs = _recursive_defaultdict()
         for phase, (start, end) in phases.items():
             from_ = self._trials[start]
