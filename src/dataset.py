@@ -104,9 +104,9 @@ class Wavelet:
             max_x = c.shape[1] * 0.002
             kwargs = dict(linestyle="--", linewidth=1, color="red")
             for name, pos in WAVES.items():
-                ax.plot([0, max_x], [pos['min'], pos['min']], **kwargs)
-                ax.text(0, pos['mean'], name, color="red")
-                ax.plot([0, max_x], [pos['max'], pos['max']], **kwargs)
+                ax.plot([0, max_x], [pos["min"], pos["min"]], **kwargs)
+                ax.text(0, pos["mean"], name, color="red")
+                ax.plot([0, max_x], [pos["max"], pos["max"]], **kwargs)
 
         ax.set_yticks(f)
         if "phase" in self.data.columns:
@@ -191,14 +191,44 @@ class Trial(Wavelet):
         assert len(np.unique([o.electrodes for o in observations])) == 1
         assert len(np.unique([o.person for o in observations])) == 1
         assert len(np.unique([o.trial for o in observations])) == 1
+        assert len(np.unique([o.response_type for o in observations])) == 1
         phases = ["baseline", "presentation", "encoding", "delay", "probe"]
         self.observations = sorted(observations, key=lambda i: phases.index(i.phase))
+        self.trial = self.observations[0].trial
+        self.person = self.observations[0].person
+        self.response_type = self.observations[0].response_type
+        self.experiment_type = self.observations[0].experiment_type
+        self.experiment_time = self.observations[0].experiment_time
+        self.electrodes = self.observations[0].electrodes
         raw_data = []
         for o in self.observations:
             d = o.data.copy()
             d["phase"] = o.phase
             raw_data.append(d)
         self.data = pd.concat(raw_data, ignore_index=True)
+
+    def __repr__(self):
+        return f"""{type(self).__name__}
+    person: {self.person}
+    experiment type: {self.experiment_type}
+    experiment time: {self.experiment_time}
+    response type: {self.response_type}
+    trial: {self.trial}
+    phases: {[o.phase for o in self.observations]}
+    electrodes: {self.electrodes}
+    example data:
+    {self.data.loc[:5]}
+        """
+
+    @property
+    def pd_repr(self):
+        return dict(
+            person=self.person,
+            experiment_type=self.experiment_type,
+            experiment_time=self.experiment_time,
+            response_type=self.response_type,
+            trial=self.trial,
+        )
 
 
 class Dataset:
@@ -226,6 +256,7 @@ class Dataset:
         exp_times: List[int] = [5, 6, 7],
         response_types: List[str] = ["correct", "error"],
         phases: List[str] = ["encoding", "delay"],
+        concat_phases: bool = False,
         electrodes: List[str] = ELECTRODES,
     ):
         all_obs = []
@@ -237,7 +268,17 @@ class Dataset:
             all_obs += obs
         with futures.ThreadPoolExecutor(max_workers=8) as executor:
             results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
-        return [r for r in results]
+            res = [r for r in results]
+        if concat_phases:
+            persons = np.unique([r.person for r in res])
+            data = []
+            for p in persons:
+                d_p = [r for r in res if r.person == p]
+                trials = np.unique([p.trial for p in d_p])
+                for t in trials:
+                    data.append(Trial([o for o in d_p if o.trial == t]))
+            return data
+        return res
 
 
 class EEGRawDataset:
