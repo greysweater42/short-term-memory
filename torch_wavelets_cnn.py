@@ -8,6 +8,7 @@ from torchvision import models
 import logging
 import sys
 import mlflow
+from datetime import datetime
 
 
 logger = logging.getLogger()
@@ -78,6 +79,7 @@ class EEGDataset(torch.utils.data.Dataset):
 
 
 wavelets, labels, persons = get_data()
+wavelets = wavelets[:, :, :, ::2]
 
 np.random.seed(42)
 v_persons = np.random.choice(np.arange(1, 157), 50, replace=False)
@@ -122,7 +124,8 @@ criterion = nn.BCELoss()
 
 
 accuracy = dict(train=[], val=[])
-EPOCH_NUM = 10
+EPOCH_NUM = 5
+t0 = datetime.now()
 for i in tqdm(range(EPOCH_NUM), desc="epoch", position=1):
     correct_t = 0
     for inputs, labels in tqdm(dl_t, desc="training", position=0):
@@ -146,6 +149,7 @@ for i in tqdm(range(EPOCH_NUM), desc="epoch", position=1):
     logger.info(f"validation accuracy: {acc}%")
     accuracy["val"].append(acc)
 
+train_time = np.round((datetime.now() - t0).seconds / 60, 2)
 
 ix = accuracy["val"].index(max(accuracy["val"]))
 with mlflow.start_run():
@@ -153,6 +157,7 @@ with mlflow.start_run():
     mlflow.log_param("learning rate", LEARNING_RATE)
     mlflow.log_param("batch size", BATCH_SIZE)
     mlflow.log_param("best epoch", ix)
-    mlflow.log_param("model spec", "RM, mobilenet freeze [:-2], wavelets")
+    mlflow.log_param("train time", train_time)
+    mlflow.log_param("model spec", "RM, mobilenet freeze [:-2], wavelets[::2]")
     mlflow.log_metric("best_acc_val", float(accuracy["val"][ix]))
     mlflow.log_metric("acc_train", float(accuracy["train"][ix]))
