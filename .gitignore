@@ -3,3 +3,5 @@ __pycache__
 *.csv
 /raw_data
 /.data_cache
+logs.log
+*.npy
