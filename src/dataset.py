@@ -74,10 +74,25 @@ def _load_clean_write_raw_data(person: int):
                         ob.write_data(data)
 
 
-class Wavelet:
+class Transform:
     def __init__(self):
         self.data = None
+        self.fouriers = dict()
         self.wavelets = dict()
+
+    def fourier_transform(self):
+        for c in self.data.columns[self.data.dtypes != "object"]:
+            y = self.data[c].to_numpy()
+            n = len(y)
+            coefficients = 2 / n * np.abs(fft(y)[: n // 2])
+            frequencies = fftfreq(n, 0.002)[: n // 2]
+            self.fouriers[c] = dict()
+            self.fouriers[c]["c"] = coefficients
+            self.fouriers[c]["f"] = frequencies
+
+    def plot_fourier(self, e):
+        ix = sum(self.fouriers[e]["f"] < 50)
+        plt.plot(self.fouriers[e]["f"][ix], self.fouriers[e]["c"][ix])
 
     def wavelet_transform(self, freqs=None):
         if not freqs:
@@ -90,7 +105,7 @@ class Wavelet:
             self.wavelets[c]["c"] = coefficiecnts
             self.wavelets[c]["f"] = frequencies
 
-    def plot_wavelets(self, e, smooth=200, waves=False):
+    def plot_wavelet(self, e, smooth=200, waves=False):
         c, f = self.wavelets[e]["c"].copy(), self.wavelets[e]["f"].copy()
         x = self.moving_average(np.abs(c), smooth)
         smooth_shift = smooth // 2 * 0.002
@@ -124,7 +139,7 @@ class Wavelet:
         return np.array([np.convolve(x, np.ones(w), "valid") / w for x in y])
 
 
-class Observation(Wavelet):
+class Observation(Transform):
     def __init__(
         self, person, experiment_type, experiment_time, response_type, trial, phase
     ):
@@ -185,7 +200,7 @@ class Observation(Wavelet):
         )
 
 
-class Trial(Wavelet):
+class Trial(Transform):
     def __init__(self, observations, phases_limits: dict = None):
         super().__init__()
         assert len(np.unique([set(o.electrodes) for o in observations])) == 1
@@ -261,6 +276,7 @@ class Dataset:
         concat_phases: bool = False,
         level_phases: bool = False,
         wavelet_transform: bool = False,
+        fourier_transform: bool = False,
         electrodes: List[str] = ELECTRODES,
     ):
         all_obs = []
@@ -291,6 +307,9 @@ class Dataset:
         if wavelet_transform:
             for r in tqdm(res, desc="transforming wavelets"):
                 r.wavelet_transform()
+        if fourier_transform:
+            for r in tqdm(res, desc="transforming fouriers"):
+                r.fourier_transform()
         return res
 
 
