@@ -56,8 +56,8 @@ def _recursive_defaultdict():
 
 
 def _load_clean_write_raw_data(person: int):
-    raw_ds = EEGRawDataset()
-    eeg = raw_ds.load_and_clean_data(person=person)
+    raw_ds = EEGRawDataset(person=person)
+    eeg = raw_ds.load_and_clean_data()
     for exp_type, times in eeg.items():
         for exp_time, response_types in times.items():
             for response_type, trials in response_types.items():
@@ -188,7 +188,7 @@ class Observation(Wavelet):
 class Trial(Wavelet):
     def __init__(self, observations, phases_limits: dict = None):
         super().__init__()
-        assert len(np.unique([o.electrodes for o in observations])) == 1
+        assert len(np.unique([set(o.electrodes) for o in observations])) == 1
         assert len(np.unique([o.person for o in observations])) == 1
         assert len(np.unique([o.trial for o in observations])) == 1
         assert len(np.unique([o.response_type for o in observations])) == 1
@@ -289,7 +289,7 @@ class Dataset:
                     data.append(ts)
             res = data
         if wavelet_transform:
-            for r in tqdm(res):
+            for r in tqdm(res, desc="transforming wavelets"):
                 r.wavelet_transform()
         return res
 
@@ -302,23 +302,14 @@ class EEGRawDataset:
         events="{}_task-VerbalWorkingMemory_events.tsv",
     )
 
-    def __init__(self):
+    def __init__(self, person: int):
+        self.person = person
+        self.person_str = "sub-" + (3 - len(str(person))) * "0" + str(person)
         self._eeg = pd.DataFrame()
         self._events = pd.DataFrame()
         self._trials = []
 
-    @staticmethod
-    def _make_person_str(i: int):
-        if i < 10:
-            return f"sub-00{i}"
-        elif i < 100:
-            return f"sub-0{i}"
-        else:
-            return f"sub-{i}"
-
-    def load_and_clean_data(self, person: int):
-        self.person = person
-        self.person_str = self._make_person_str(person)
+    def load_and_clean_data(self):
         self._load_data()
         self._apply_filters()
         self._extract_trials()
@@ -341,7 +332,8 @@ class EEGRawDataset:
 
     def _apply_filters(self):
         freq = fftfreq(len(self._eeg), 0.002)  # 500Hz -> 0.002
-        for c in self._eeg.columns:
+        desc = f"person: {self.person}, applying filters"
+        for c in tqdm(self._eeg.columns, desc=desc):
             y_fft = fft(self._eeg[c].to_numpy()).real
             # 50Hz line filter
             y_fft[(np.abs(freq) > 45) & (np.abs(freq) < 51)] = 0
