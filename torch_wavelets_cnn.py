@@ -45,7 +45,7 @@ def get_data(force_reload=False):
     data = ds.get_data(
         exp_types=["R", "M"],
         exp_times=[5],
-        phases=["delay"],
+        phases=["encoding", "delay"],
         concat_phases=True,
         level_phases=True,
         wavelet_transform=True,
@@ -78,8 +78,9 @@ class EEGDataset(torch.utils.data.Dataset):
         return self.x[idx].repeat(3, 1, 1), self.y[idx]
 
 
-wavelets, labels, persons = get_data()
+wavelets, labels, persons = get_data(force_reload=True)
 wavelets = wavelets[:, :, :, ::2]
+
 
 np.random.seed(42)
 v_persons = np.random.choice(np.arange(1, 157), 50, replace=False)
@@ -158,6 +159,6 @@ with mlflow.start_run():
     mlflow.log_param("batch size", BATCH_SIZE)
     mlflow.log_param("best epoch", ix)
     mlflow.log_param("train time", train_time)
-    mlflow.log_param("model spec", "RM, mobilenet freeze [:-2], wavelets[::2]")
+    mlflow.log_param("model spec", "RM, mobilenet freeze [:-2], wavelets[::2], encoding+delay")
     mlflow.log_metric("best_acc_val", float(accuracy["val"][ix]))
     mlflow.log_metric("acc_train", float(accuracy["train"][ix]))
