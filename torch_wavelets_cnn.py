@@ -78,7 +78,7 @@ class EEGDataset(torch.utils.data.Dataset):
         return self.x[idx], self.y[idx]
 
 
-wavelets, labels, persons = get_data(force_reload=True)
+wavelets, labels, persons = get_data()
 wavelets = wavelets[:, :, :, ::2]
 
 
@@ -99,22 +99,42 @@ dl_v = torch.utils.data.DataLoader(ds_v, batch_size=BATCH_SIZE, shuffle=True)
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.model = models.mobilenet_v2(pretrained=True)
-
-        for param in self.model.features[:-2].parameters():
-            param.requires_grad = False
-
-        self.model.classifier = nn.Sequential(
-            nn.Linear(self.model.classifier[1].in_features, 500),
+        self.features = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(500, 1),
-            nn.Sigmoid(),
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(
+                in_channels=64,
+                out_channels=128,
+                kernel_size=5,
+                padding=1,
+                stride=(1, 2),
+            ),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
         )
+        self.fc = nn.Sequential(nn.Linear(39168, 1), nn.Sigmoid())
 
     def forward(self, x):
-        return self.model(x.repeat(1, 3, 1, 1))
+        x = self.features(x)
+        x = self.fc(x.flatten(1))
+        return x
 
+
+# net = Net()
+# input, label = next(iter(dl_t))
+# np.product(net.features(input).shape[1:])
 
 device = "cuda"
 net = Net()
@@ -149,8 +169,6 @@ for i in tqdm(range(EPOCH_NUM), desc="epoch", position=1):
     acc = np.round(correct_v / len(ds_v) * 100, 2)
     logger.info(f"validation accuracy: {acc}%")
     accuracy["val"].append(acc)
-    import time
-    time.sleep(20)
 
 train_time = np.round((datetime.now() - t0).seconds / 60, 2)
 
@@ -161,6 +179,6 @@ with mlflow.start_run():
     mlflow.log_param("batch size", BATCH_SIZE)
     mlflow.log_param("best epoch", ix)
     mlflow.log_param("train time", train_time)
-    mlflow.log_param("model spec", "RM, T5, mobilenet freeze [:-2], delay")
+    mlflow.log_param("model spec", "RM, T5, custom 7 layers, delay")
     mlflow.log_metric("best_acc_val", float(accuracy["val"][ix]))
     mlflow.log_metric("acc_train", float(accuracy["train"][ix]))
