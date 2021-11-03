@@ -45,14 +45,14 @@ def get_data(force_reload=False):
     data = ds.get_data(
         exp_types=["R", "M"],
         exp_times=[5],
-        phases=["encoding", "delay"],
+        phases=["delay"],
         concat_phases=True,
         level_phases=True,
         wavelet_transform=True,
-        electrodes=["Fz"],
+        electrodes=["T5"],
     )
 
-    wavelets = np.array([np.expand_dims(d.wavelets["Fz"]["c"], 0) for d in data])
+    wavelets = np.array([np.expand_dims(d.wavelets["T5"]["c"], 0) for d in data])
     labels = np.array([int(d.experiment_type == "M") for d in data])
     persons = np.array([d.person for d in data])
 
@@ -78,8 +78,8 @@ class EEGDataset(torch.utils.data.Dataset):
         return self.x[idx], self.y[idx]
 
 
-wavelets, labels, persons = get_data()
-# wavelets = wavelets[:, :, :, ::2]
+wavelets, labels, persons = get_data(force_reload=True)
+wavelets = wavelets[:, :, :, ::2]
 
 
 np.random.seed(42)
@@ -150,7 +150,7 @@ for i in tqdm(range(EPOCH_NUM), desc="epoch", position=1):
     logger.info(f"validation accuracy: {acc}%")
     accuracy["val"].append(acc)
     import time
-    time.sleep(60)
+    time.sleep(20)
 
 train_time = np.round((datetime.now() - t0).seconds / 60, 2)
 
@@ -161,6 +161,6 @@ with mlflow.start_run():
     mlflow.log_param("batch size", BATCH_SIZE)
     mlflow.log_param("best epoch", ix)
     mlflow.log_param("train time", train_time)
-    mlflow.log_param("model spec", "RM, mobilenet freeze [:-2], encoding+delay")
+    mlflow.log_param("model spec", "RM, T5, mobilenet freeze [:-2], delay")
     mlflow.log_metric("best_acc_val", float(accuracy["val"][ix]))
     mlflow.log_metric("acc_train", float(accuracy["train"][ix]))
