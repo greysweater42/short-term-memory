@@ -75,10 +75,10 @@ class EEGDataset(torch.utils.data.Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        return self.x[idx].repeat(3, 1, 1), self.y[idx]
+        return self.x[idx], self.y[idx]
 
 
-wavelets, labels, persons = get_data(force_reload=True)
+wavelets, labels, persons = get_data()
 wavelets = wavelets[:, :, :, ::2]
 
 
@@ -113,7 +113,7 @@ class Net(nn.Module):
         )
 
     def forward(self, x):
-        return self.model(x)
+        return self.model(x.repeat(1, 3, 1, 1))
 
 
 device = "cuda"
