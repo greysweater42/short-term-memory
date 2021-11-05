@@ -14,41 +14,16 @@ import pandas as pd
 import pyarrow.feather as feather
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
+import json
 
 
 mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
 
 DATA_CACHE_PATH = Path(".data_cache")
 DATA_RAW_PATH = Path("raw_data")
-ELECTRODES = [
-    "Fp1",
-    "Fp2",
-    "F7",
-    "F3",
-    "Fz",
-    "F4",
-    "F8",
-    "T3",
-    "C3",
-    "Cz",
-    "C4",
-    "T4",
-    "T5",
-    "P3",
-    "Pz",
-    "P4",
-    "T6",
-    "O1",
-    "O2",
-    "EOGv",
-    "EOGh",
-]
-WAVES = dict(
-    theta=dict(min=4, mean=6, max=8),
-    alpha=dict(min=8, mean=10.5, max=13),
-    beta=dict(min=16, mean=19, max=22),
-    gamma=dict(min=35, mean=42.5, max=50),
-)
+
+with open("src/params.json") as f:
+    params = json.load(f)
 
 
 def _recursive_defaultdict():
@@ -118,7 +93,7 @@ class Transform:
         if waves:
             max_x = c.shape[1] * 0.002
             kwargs = dict(linestyle="--", linewidth=1, color="red")
-            for name, pos in WAVES.items():
+            for name, pos in params["WAVES"].items():
                 ax.plot([0, max_x], [pos["min"], pos["min"]], **kwargs)
                 ax.text(0, pos["mean"], name, color="red")
                 ax.plot([0, max_x], [pos["max"], pos["max"]], **kwargs)
@@ -277,7 +252,7 @@ class Dataset:
         level_phases: bool = False,
         wavelet_transform: bool = False,
         fourier_transform: bool = False,
-        electrodes: List[str] = ELECTRODES,
+        electrodes: List[str] = params["ELECTRODES"],
     ):
         all_obs = []
         combs = product(exp_types, exp_times, response_types, phases)
