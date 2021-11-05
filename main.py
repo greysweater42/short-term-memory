@@ -1,6 +1,17 @@
 from src.dataset import Dataset
-import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import mlflow
+
+np.random.seed(42)
+
+
+e = "Fz"
+
+
+def moving_average(x, w):
+    return np.convolve(x, np.ones(w), "valid") / w
 
 
 ds = Dataset()
@@ -10,19 +21,14 @@ data = ds.get_data(
     phases=["encoding"],
     concat_phases=True,
     fourier_transform=True,
-    electrodes=["Fz"],
+    electrodes=[e],
 )
-
-np.random.seed(42)
-v_persons = np.random.choice(np.arange(1, 157), 50, replace=False)
-# %%
-def moving_average(x, w):
-    return np.convolve(x, np.ones(w), 'valid') / w
 
 ix1 = sum(data[0].fouriers["Fz"]["f"] < 1)
 ix2 = sum(data[0].fouriers["Fz"]["f"] < 40)
 
-e = "Fz"
+
+v_persons = np.random.choice(np.arange(1, 157), 50, replace=False)
 xs_t = []
 ys_t = []
 xs_v = []
@@ -40,21 +46,19 @@ x_v = np.array(xs_v)
 y_t = (np.array(ys_t) == "M").astype(int)
 y_v = (np.array(ys_v) == "M").astype(int)
 
-from xgboost import XGBClassifier
-xgb = XGBClassifier(max_depth=1, min_child_weight=10)
-xgb.fit(x_t, y_t)
+lr = LogisticRegression()
+lr.fit(x_t, y_t)
 
-y_v_hat = xgb.predict(x_v)
-y_t_hat = xgb.predict(x_t)
-from sklearn.metrics import confusion_matrix, accuracy_score
-# confusion_matrix(y_v, y_v_hat)
+y_v_hat = lr.predict(x_v)
+y_t_hat = lr.predict(x_t)
+
 acc_val = accuracy_score(y_v, y_v_hat) * 100
 acc_train = accuracy_score(y_t, y_t_hat) * 100
+print(acc_val)
+print(acc_train)
 
 
-# %%
-import mlflow
 with mlflow.start_run():
-    mlflow.log_param("model spec", "RM, xgboost on fourier")
+    mlflow.log_param("model spec", "RM, logistic regression on fourier")
     mlflow.log_metric("best_acc_val", acc_val)
     mlflow.log_metric("acc_train", acc_train)
