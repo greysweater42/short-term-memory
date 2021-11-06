@@ -151,7 +151,53 @@ class Trial(Transform):
 
 class Dataset:
     def __init__(self):
+        self.data = []
+        self.phases = []
+        self.experiment_types = []
+        # TODO change name from experiment times to experiment_loads
+        self.experiment_times = []
+        self.response_types = []
+        self.electrodes = []
+        self.is_phases_leveled = None
+        self.is_concat_phases = None
+        self.is_wavelet_transformed = None
+        self.is_fourier_transformed = None
+        self.is_data_loaded = None
+        self.train = None
+        self.val = None
+        self.labels = None
+        self.label_dict = dict()
+
+    def __repr__(self):
+        # TODO with labels
         pass
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __len__(self):
+        return len(self.data)
+
+    def train_val_divide(self, val_size: int = None):
+        # TODO use k-fold
+        if not val_size:
+            val_size = len(self.data) // 3
+        np.random.seed(42)
+        all_obs = range(1, len(set([d.person for d in self.data])) + 1)
+        vals = set(np.random.choice(all_obs, val_size, replace=False))
+        ds = zip(self.labels, self.data)
+        self.val = [(label, d) for label, d in ds if d.person in vals]
+        trains = set(all_obs) - vals
+        # TODO self.train should be a Dataset object
+        ds = zip(self.labels, self.data)  # zip is a generator: needs reassignment
+        self.train = [(label, d) for label, d in ds if d.person in trains]
+
+    def create_labels(self, dimension):
+        str_labels = [getattr(d, dimension) for d in self.data]
+        labels_names = getattr(self, dimension + "s")
+        self.labels = np.array([s == labels_names[0] for s in str_labels]).astype(int)
+        labels = zip(reversed(labels_names), range(len(labels_names)))
+        self.labels_dict = {label: num for label, num in labels}
 
     def write_data_cache(self, cpus: int = None):
         if not cpus:
@@ -168,20 +214,21 @@ class Dataset:
             results = executor.imap(_load_clean_write_raw_data, persons)
             [_ for _ in tqdm(results, total=len(persons))]
 
-    def get_data(
+    def load_data(
         self,
-        exp_types: List[str] = ["M", "R"],
-        exp_times: List[int] = [5, 6, 7],
+        experiment_types: List[str] = ["M", "R"],
+        experiment_times: List[int] = [5, 6, 7],
         response_types: List[str] = ["correct", "error"],
         phases: List[str] = ["encoding", "delay"],
-        concat_phases: bool = False,
-        level_phases: bool = False,
-        wavelet_transform: bool = False,
-        fourier_transform: bool = False,
         electrodes: List[str] = params["ELECTRODES"],
     ):
+        self.phases = phases
+        self.experiment_times = experiment_times
+        self.experiment_types = experiment_types
+        self.response_types = response_types
+        self.electrodes = electrodes
         all_obs = []
-        combs = product(exp_types, exp_times, response_types, phases)
+        combs = product(experiment_types, experiment_times, response_types, phases)
         for exp_type, exp_time, response_type, phase in combs:
             regex = f"*/{exp_type}/{exp_time}/{response_type}/*/{phase}.feather"
             paths = Path(DATA_CACHE_PATH).rglob(regex)
@@ -189,26 +236,43 @@ class Dataset:
             all_obs += obs
         with futures.ThreadPoolExecutor(max_workers=8) as executor:
             results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
-            res = [r for r in results]
-        if concat_phases:
-            phase_limits = dict()
-            if level_phases:
-                for phase in phases:
-                    len_phase = [len(r.data) for r in res if r.phase == phase]
-                    phase_limits[phase] = min(len_phase)
-            persons = np.unique([r.person for r in res])
-            data = []
-            for p in persons:
-                d_p = [r for r in res if r.person == p]
-                trials = np.unique([p.trial for p in d_p])
-                for t in trials:
-                    ts = Trial([o for o in d_p if o.trial == t], phase_limits)
-                    data.append(ts)
-            res = data
-        if wavelet_transform:
-            for r in tqdm(res, desc="transforming wavelets"):
-                r.wavelet_transform()
-        if fourier_transform:
-            for r in tqdm(res, desc="transforming fouriers"):
-                r.fourier_transform()
-        return res
+            for r in tqdm(results, desc="loading data", total=len(all_obs)):
+                self.data.append(r)
+            self.is_data_loaded = True
+
+    # def unload_time_domain_data(self):
+    #     for d in data:
+    #         d.unload_time_domain_data()
+    #     self.is_data_loaded = False
+
+    def concat_phases(self, level_phases=False):
+        phase_limits = dict()
+        if level_phases:
+            for phase in self.phases:
+                len_phase = [len(r.data) for r in self.data if r.phase == phase]
+                phase_limits[phase] = min(len_phase)
+        persons = np.unique([r.person for r in self.data])
+        data = []
+        for p in tqdm(persons, desc="concatenating phases"):
+            d_p = [r for r in self.data if r.person == p]
+            trials = np.unique([p.trial for p in d_p])
+            for t in trials:
+                ts = Trial([o for o in d_p if o.trial == t], phase_limits)
+                data.append(ts)
+        self.data = data
+        self.is_concat_phases = True
+        self.is_phases_leveled = True
+
+    def transform_wavelet(self):
+        for d in tqdm(self.data, desc="transforming wavelets"):
+            d.wavelet_transform()
+        self.is_wavelet_transformed = True
+
+    def transform_fourier(self, n):
+        for d in tqdm(self.data, desc="transforming fouriers"):
+            d.fourier_transform(n=n)
+        self.is_fourier_transformed = True
+
+    def process_fourier(self, *args, **kwargs):
+        for d in tqdm(self.data, desc="processing fouriers"):
+            d.fourier_process(*args, **kwargs)
