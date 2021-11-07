@@ -1,7 +1,7 @@
 from src.dataset import Dataset
 from src.metrics import calculate_metrics
 import numpy as np
-from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 import mlflow
 
 
@@ -30,7 +30,7 @@ x_v = np.array([d[1].fouriers[e].processed[0].coef_ for d in ds.val])
 y_t = np.array([d[0] for d in ds.train])
 y_v = np.array([d[0] for d in ds.val])
 
-model = LogisticRegression()
+model = XGBClassifier(max_depth=2)
 model.fit(x_t, y_t)
 
 y_t_hat = model.predict(x_t)
@@ -42,7 +42,7 @@ metrics = calculate_metrics(
 )
 
 with mlflow.start_run():
-    mlflow.log_param("model spec", "RM, logistic regression on fourier")
+    mlflow.log_param("model spec", "RM, xgb on fourier, max_depth=2")
     mlflow.log_metric("acc_train", metrics.acc_train)
     mlflow.log_metric("acc_val", metrics.acc_val)
     mlflow.log_metric("precision", metrics.precision)

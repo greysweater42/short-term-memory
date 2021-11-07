@@ -2,7 +2,7 @@ artifact_uri: file:///home/tomek/doktorat/code/mlruns/0/5626a47ef264444aac7f64ee
 end_time: 1635963700157
 entry_point_name: ''
 experiment_id: '0'
-lifecycle_stage: active
+lifecycle_stage: deleted
 name: ''
 run_id: 5626a47ef264444aac7f64eed81ebe28
 run_uuid: 5626a47ef264444aac7f64eed81ebe28
