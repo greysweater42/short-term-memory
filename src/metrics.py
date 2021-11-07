@@ -10,9 +10,8 @@ from sklearn.metrics import (
 )
 
 
-def calculate_metrics(y_t, y_t_hat, y_v, y_v_hat):
-
-    fpr, tpr, _ = roc_curve(y_v, y_v_hat, pos_label=2)
+def calculate_metrics(y_t, y_t_hat, y_v, y_v_hat, y_v_hat_proba):
+    fpr, tpr, _ = roc_curve(y_v, y_v_hat_proba)
     cm = confusion_matrix(y_v, y_v_hat)
     Metrics = namedtuple(
         "Metrics", "acc_val acc_train precision recall specificity auc"

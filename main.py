@@ -33,10 +33,13 @@ y_v = np.array([d[0] for d in ds.val])
 model = LogisticRegression()
 model.fit(x_t, y_t)
 
-y_v_hat = model.predict(x_v)
 y_t_hat = model.predict(x_t)
+y_v_hat = model.predict(x_v)
+y_v_hat_proba = model.predict_proba(x_v)[:, 1]
 
-metrics = calculate_metrics(y_t=y_t, y_t_hat=y_t_hat, y_v=y_v, y_v_hat=y_v_hat)
+metrics = calculate_metrics(
+    y_t=y_t, y_t_hat=y_t_hat, y_v=y_v, y_v_hat=y_v_hat, y_v_hat_proba=y_v_hat_proba
+)
 
 with mlflow.start_run():
     mlflow.log_param("model spec", "RM, logistic regression on fourier")
