@@ -10,17 +10,24 @@ from sklearn.metrics import (
 )
 
 
-def calculate_metrics(y_t, y_t_hat, y_v, y_v_hat, y_v_hat_proba):
+def calculate_metrics(model, x_t, y_t, x_v, y_v):
+    y_t_hat = model.predict(x_t)
+    y_v_hat = model.predict(x_v)
+    y_v_hat_proba = model.predict_proba(x_v)[:, 1]
     fpr, tpr, _ = roc_curve(y_v, y_v_hat_proba)
     cm = confusion_matrix(y_v, y_v_hat)
     Metrics = namedtuple(
         "Metrics", "acc_val acc_train precision recall specificity auc"
     )
-    return Metrics(
-        acc_val=accuracy_score(y_v, y_v_hat) * 100,
-        acc_train=accuracy_score(y_t, y_t_hat) * 100,
-        precision=precision_score(y_v, y_v_hat),
-        recall=recall_score(y_v, y_v_hat),
-        specificity=cm[0][0] / sum(cm[0]),
-        auc=auc(fpr, tpr),
+    Parameters = namedtuple("Parameters", "model_class")
+    return (
+        Metrics(
+            acc_val=accuracy_score(y_v, y_v_hat) * 100,
+            acc_train=accuracy_score(y_t, y_t_hat) * 100,
+            precision=precision_score(y_v, y_v_hat),
+            recall=recall_score(y_v, y_v_hat),
+            specificity=cm[0][0] / sum(cm[0]),
+            auc=auc(fpr, tpr),
+        ),
+        Parameters(model_class=type(model).__name__),
     )

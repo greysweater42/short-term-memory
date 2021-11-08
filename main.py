@@ -45,21 +45,14 @@ y_v = np.array([d[0] for d in ds.val])
 def main():
     model = RandomForestClassifier()
     model.fit(x_t, y_t)
-
-    y_t_hat = model.predict(x_t)
-    y_v_hat = model.predict(x_v)
-    y_v_hat_proba = model.predict_proba(x_v)[:, 1]
-
-    metrics = calculate_metrics(
-        y_t=y_t, y_t_hat=y_t_hat, y_v=y_v, y_v_hat=y_v_hat, y_v_hat_proba=y_v_hat_proba
-    )
-    return metrics
+    return calculate_metrics(model, x_t, y_t, x_v, y_v)
 
 
 with mlflow.start_run():
-    metrics = main()
-    mlflow.log_param("model spec", "RM, random forest on fourier")
+    metrics, parameters = main()
+    mlflow.log_param("model spec", "RM, fourier")
     mlflow.log_metric("acc_train", metrics.acc_train)
+    mlflow.log_param("model class", parameters.model_class)
     mlflow.log_metric("acc_val", metrics.acc_val)
     mlflow.log_metric("precision", metrics.precision)
     mlflow.log_metric("recall", metrics.recall)
