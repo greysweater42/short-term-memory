@@ -50,9 +50,9 @@ def main():
 
 with mlflow.start_run():
     metrics, parameters = main()
-    mlflow.log_param("model spec", "RM, fourier")
-    mlflow.log_metric("acc_train", metrics.acc_train)
+    mlflow.set_tags({"class": "RM", "data": "fourier"})
     mlflow.log_param("model class", parameters.model_class)
+    mlflow.log_metric("acc_train", metrics.acc_train)
     mlflow.log_metric("acc_val", metrics.acc_val)
     mlflow.log_metric("precision", metrics.precision)
     mlflow.log_metric("recall", metrics.recall)
