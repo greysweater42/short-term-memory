@@ -183,20 +183,6 @@ class Dataset:
     def __len__(self):
         return len(self.data)
 
-    def train_val_divide(self, val_size: int = None):
-        # TODO use k-fold
-        if not val_size:
-            val_size = len(self.data) // 3
-        np.random.seed(42)
-        all_obs = range(1, len(set([d.person for d in self.data])) + 1)
-        vals = set(np.random.choice(all_obs, val_size, replace=False))
-        ds = zip(self.labels, self.data)
-        self.val = [(label, d) for label, d in ds if d.person in vals]
-        trains = set(all_obs) - vals
-        # TODO self.train should be a Dataset object
-        ds = zip(self.labels, self.data)  # zip is a generator: needs reassignment
-        self.train = [(label, d) for label, d in ds if d.person in trains]
-
     def create_labels(self, dimension):
         str_labels = [getattr(d, dimension) for d in self.data]
         labels_names = getattr(self, dimension + "s")
@@ -287,6 +273,3 @@ class Dataset:
     def process_fourier(self, *args, **kwargs):
         for d in tqdm(self.data, desc="processing fouriers"):
             d.fourier_process(*args, **kwargs)
-
-    def downsample(self):
-        pass
