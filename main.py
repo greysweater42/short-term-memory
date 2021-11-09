@@ -16,6 +16,7 @@ smooth = 9
 stride = 4
 phases = ["delay"]
 letters = [5]
+label = "response_type"
 
 ds = Dataset()
 ds.load_data(
@@ -25,7 +26,7 @@ ds.load_data(
     electrodes=e,
 )
 # ds.concat_phases()
-ds.create_labels("experiment_type")
+ds.create_labels(label)
 ds.transform_fourier(n=3300)
 ds.process_fourier(bounds=[bound_high, bound_low], smooth=smooth, stride=stride)
 ds.train_val_divide(val_size=50)
@@ -70,7 +71,7 @@ with mlflow.start_run():
     metrics, parameters = main(x_t, y_t, x_v, y_v)
     metrics
     tags = {
-        "class": "RM",
+        "class": "error" if label == "response_type" else "RM",
         "data": "fourier",
         "phases": phases,
         "letters": [5],
