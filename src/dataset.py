@@ -1,7 +1,7 @@
 import json
 import shutil
-from concurrent import futures
 from itertools import product
+from functools import partial
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from typing import List
@@ -240,11 +240,17 @@ class Dataset:
             paths = Path(DATA_CACHE_PATH).rglob(regex)
             obs = [Observation(*p.with_suffix("").parts[-6:]) for p in paths]
             all_obs += obs
-        with futures.ThreadPoolExecutor(max_workers=8) as executor:
-            results = executor.map(lambda ob: ob.read_data(electrodes), all_obs)
+        with Pool(processes=6) as executor:
+            results = executor.imap(
+                partial(self._async_load_data, electrodes=electrodes), all_obs
+            )
             for r in tqdm(results, desc="loading data", total=len(all_obs)):
                 self.data.append(r)
             self.is_data_loaded = True
+
+    @staticmethod
+    def _async_load_data(x, electrodes):
+        return x.read_data(electrodes)
 
     # def unload_time_domain_data(self):
     #     for d in data:
@@ -280,5 +286,7 @@ class Dataset:
         self.is_fourier_transformed = True
 
     def process_fourier(self, *args, **kwargs):
-        for d in tqdm(self.data, desc="processing fouriers"):
-            d.fourier_process(*args, **kwargs)
+        # for d in tqdm(self.data, desc="processing fouriers"):
+        #     d.fourier_process(*args, **kwargs)
+        for i in tqdm(range(len(self.data)), desc="processing fouriers"):
+            self.data[i] = self.data[i].fourier_process(*args, **kwargs)
