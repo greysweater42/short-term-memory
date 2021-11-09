@@ -25,14 +25,14 @@ def _load_clean_write_raw_data(person: int):
     raw_ds = EEGRawDataset(person=person)
     eeg = raw_ds.load_and_clean_data()
     for exp_type, times in eeg.items():
-        for exp_time, response_types in times.items():
+        for load, response_types in times.items():
             for response_type, trials in response_types.items():
                 for trial, phases in trials.items():
                     for phase, data in phases.items():
                         ob = Observation(
                             person=person,
                             experiment_type=exp_type,
-                            experiment_time=exp_time,
+                            load=load,
                             response_type=response_type,
                             trial=trial,
                             phase=phase,
@@ -42,12 +42,12 @@ def _load_clean_write_raw_data(person: int):
 
 class Observation(Signal):
     def __init__(
-        self, person, experiment_type, experiment_time, response_type, trial, phase
+        self, person, experiment_type, load, response_type, trial, phase
     ):
         super().__init__()
         self.person = int(person)
         self.experiment_type = experiment_type
-        self.experiment_time = int(experiment_time)
+        self.load = int(load)
         self.response_type = response_type
         self.trial = int(trial)
         self.phase = phase
@@ -55,7 +55,7 @@ class Observation(Signal):
             DATA_CACHE_PATH
             / str(self.person)
             / self.experiment_type
-            / str(self.experiment_time)
+            / str(self.load)
             / self.response_type
             / str(self.trial)
             / self.phase
@@ -66,7 +66,7 @@ class Observation(Signal):
         return f"""Observation
     person: {self.person}
     experiment type: {self.experiment_type}
-    experiment time: {self.experiment_time}
+    load: {self.load}
     response type: {self.response_type}
     trial: {self.trial}
     phase: {self.phase}
@@ -94,7 +94,7 @@ class Observation(Signal):
         return dict(
             person=self.person,
             experiment_type=self.experiment_type,
-            experiment_time=self.experiment_time,
+            load=self.load,
             response_type=self.response_type,
             trial=self.trial,
             phase=self.phase,
@@ -114,7 +114,7 @@ class Trial(Signal):
         self.person = self.observations[0].person
         self.response_type = self.observations[0].response_type
         self.experiment_type = self.observations[0].experiment_type
-        self.experiment_time = self.observations[0].experiment_time
+        self.load = self.observations[0].load
         self.electrodes = self.observations[0].electrodes
         raw_data = []
         for o in self.observations:
@@ -135,7 +135,7 @@ class Trial(Signal):
         return f"""{type(self).__name__}
     person: {self.person}
     experiment type: {self.experiment_type}
-    experiment time: {self.experiment_time}
+    load: {self.load}
     response type: {self.response_type}
     trial: {self.trial}
     phases: {[o.phase for o in self.observations]}
@@ -149,7 +149,7 @@ class Trial(Signal):
         return dict(
             person=self.person,
             experiment_type=self.experiment_type,
-            experiment_time=self.experiment_time,
+            load=self.load,
             response_type=self.response_type,
             trial=self.trial,
         )
@@ -160,8 +160,7 @@ class Dataset:
         self.data = []
         self.phases = []
         self.experiment_types = []
-        # TODO change name from experiment times to experiment_loads
-        self.experiment_times = []
+        self.loads = []
         self.response_types = []
         self.electrodes = []
         self.is_phases_leveled = None
@@ -223,20 +222,20 @@ class Dataset:
     def load_data(
         self,
         experiment_types: List[str] = ["M", "R"],
-        experiment_times: List[int] = [5, 6, 7],
+        loads: List[int] = [5, 6, 7],
         response_types: List[str] = ["correct", "error"],
         phases: List[str] = ["encoding", "delay"],
         electrodes: List[str] = params["ELECTRODES"],
     ):
         self.phases = phases
-        self.experiment_times = experiment_times
+        self.loads = loads
         self.experiment_types = experiment_types
         self.response_types = response_types
         self.electrodes = electrodes
         all_obs = []
-        combs = product(experiment_types, experiment_times, response_types, phases)
-        for exp_type, exp_time, response_type, phase in combs:
-            regex = f"*/{exp_type}/{exp_time}/{response_type}/*/{phase}.feather"
+        combs = product(experiment_types, loads, response_types, phases)
+        for exp_type, load, response_type, phase in combs:
+            regex = f"*/{exp_type}/{load}/{response_type}/*/{phase}.feather"
             paths = Path(DATA_CACHE_PATH).rglob(regex)
             obs = [Observation(*p.with_suffix("").parts[-6:]) for p in paths]
             all_obs += obs
@@ -288,3 +287,6 @@ class Dataset:
     def process_fourier(self, *args, **kwargs):
         for d in tqdm(self.data, desc="processing fouriers"):
             d.fourier_process(*args, **kwargs)
+
+    def downsample(self):
+        pass

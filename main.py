@@ -21,7 +21,7 @@ label = "response_type"
 ds = Dataset()
 ds.load_data(
     experiment_types=["R", "M"],
-    experiment_times=letters,
+    loads=letters,
     phases=phases,
     electrodes=e,
 )
