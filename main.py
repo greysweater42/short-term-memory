@@ -11,12 +11,12 @@ def _recursive_defaultdict():
     return defaultdict(_recursive_defaultdict)
 
 
-e = ["Fz", "P3", "P4"]
+e = ["Fz", "P3", "P4", "Pz", "C3", "C4", "F7", "F8", "O1", "O2"]
 bound_high = 1
 bound_low = 40
 smooth = 9
 stride = 4
-phases = ["encoding"]
+phases = ["delay"]
 letters = [5]
 
 ds = Dataset()
@@ -28,7 +28,7 @@ ds.load_data(
 )
 # ds.concat_phases()
 ds.create_labels("experiment_type")
-ds.transform_fourier(n=1550)
+ds.transform_fourier(n=3300)
 ds.process_fourier(bounds=[bound_high, bound_low], smooth=smooth, stride=stride)
 ds.train_val_divide(val_size=50)
 
@@ -65,8 +65,12 @@ def main(x_t, y_t, x_v, y_v):
         colsample_bytree=0.3,
         gamma=10,
     )
-    model.fit(x_t, y_t)
-    return calculate_metrics(model, x_t, y_t, x_v, y_v)
+    from sklearn.decomposition import PCA
+
+    pca = PCA(20)
+    pca.fit(x_t)
+    model.fit(pca.transform(x_t), y_t)
+    return calculate_metrics(model, pca.transform(x_t), y_t, pca.transform(x_v), y_v)
 
 
 with mlflow.start_run():
@@ -78,6 +82,7 @@ with mlflow.start_run():
         "phases": phases,
         "letters": [5],
         "electrodes": e,
+        "additional": "pca 10"
     }
     mlflow.set_tags(tags)
     mlflow.log_param("model class", parameters.model_class)
