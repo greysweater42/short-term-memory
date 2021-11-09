@@ -16,7 +16,7 @@ bound_high = 1
 bound_low = 40
 smooth = 9
 stride = 4
-phases = ["delay"]
+phases = ["encoding"]
 letters = [5]
 
 ds = Dataset()
@@ -28,7 +28,7 @@ ds.load_data(
 )
 # ds.concat_phases()
 ds.create_labels("experiment_type")
-ds.transform_fourier(n=3300)
+ds.transform_fourier(n=1550)
 ds.process_fourier(bounds=[bound_high, bound_low], smooth=smooth, stride=stride)
 ds.train_val_divide(val_size=50)
 
