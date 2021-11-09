@@ -12,7 +12,7 @@ import pyarrow.feather as feather
 from tqdm import tqdm
 
 from src.eeg_raw_dataset import DATA_RAW_PATH, EEGRawDataset
-from src.transform import Transform
+from src.signal import Signal
 
 
 DATA_CACHE_PATH = Path(".data_cache")
@@ -40,7 +40,7 @@ def _load_clean_write_raw_data(person: int):
                         ob.write_data(data)
 
 
-class Observation(Transform):
+class Observation(Signal):
     def __init__(
         self, person, experiment_type, experiment_time, response_type, trial, phase
     ):
@@ -101,7 +101,7 @@ class Observation(Transform):
         )
 
 
-class Trial(Transform):
+class Trial(Signal):
     def __init__(self, observations, phases_limits: dict = None):
         super().__init__()
         assert len(np.unique([set(o.electrodes) for o in observations])) == 1

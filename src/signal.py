@@ -16,7 +16,7 @@ def _recursive_defaultdict():
     return defaultdict(_recursive_defaultdict)
 
 
-class Transform:
+class Signal:
     def __init__(self):
         self.data = None
         self.fouriers = dict()
