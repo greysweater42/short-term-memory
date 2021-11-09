@@ -4,14 +4,12 @@ import numpy as np
 import mlflow
 from collections import defaultdict
 
-from xgboost import XGBClassifier
-
 
 def _recursive_defaultdict():
     return defaultdict(_recursive_defaultdict)
 
 
-e = ["Fz", "P3", "P4", "Pz", "C3", "C4", "F7", "F8", "O1", "O2"]
+e = ["Fz", "P3", "P4"]
 bound_high = 1
 bound_low = 40
 smooth = 9
@@ -57,14 +55,9 @@ y_v = np.array(y_v)
 
 
 def main(x_t, y_t, x_v, y_v):
-    model = XGBClassifier(
-        eval_metric="logloss",
-        max_depth=2,
-        subsample=0.7,
-        reg_alpha=10,
-        colsample_bytree=0.3,
-        gamma=10,
-    )
+    from sklearn import svm
+
+    model = svm.SVC(probability=True)
     from sklearn.decomposition import PCA
 
     pca = PCA(20)
@@ -82,7 +75,7 @@ with mlflow.start_run():
         "phases": phases,
         "letters": [5],
         "electrodes": e,
-        "additional": "pca 10"
+        "additional": "pca 20",
     }
     mlflow.set_tags(tags)
     mlflow.log_param("model class", parameters.model_class)

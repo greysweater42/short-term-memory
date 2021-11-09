@@ -286,7 +286,5 @@ class Dataset:
         self.is_fourier_transformed = True
 
     def process_fourier(self, *args, **kwargs):
-        # for d in tqdm(self.data, desc="processing fouriers"):
-        #     d.fourier_process(*args, **kwargs)
-        for i in tqdm(range(len(self.data)), desc="processing fouriers"):
-            self.data[i] = self.data[i].fourier_process(*args, **kwargs)
+        for d in tqdm(self.data, desc="processing fouriers"):
+            d.fourier_process(*args, **kwargs)

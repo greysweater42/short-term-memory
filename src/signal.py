@@ -129,8 +129,8 @@ class FourierProcessed:
         """
 
     def transform(self, coef, freq):
-        ix_high = sum(freq < self.bounds[0])  # high bound - remove low freq
-        ix_low = sum(freq < self.bounds[1])  # low bound - remove high freq
+        ix_high = np.sum(freq < self.bounds[0])  # high bound - remove low freq
+        ix_low = np.sum(freq < self.bounds[1])  # low bound - remove high freq
         coefs_smooth = self.moving_average_1D(coef[ix_high:ix_low], self.smooth)
         ix_high_freq = ix_high + self.smooth // 2
         ix_low_freq = ix_low - self.smooth // 2
