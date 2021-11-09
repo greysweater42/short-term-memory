@@ -125,6 +125,12 @@ class Trial(Transform):
             raw_data.append(d)
         self.data = pd.concat(raw_data, ignore_index=True)
 
+    def __getitem__(self, idx):
+        return self.observations[idx]
+
+    def __len__(self):
+        return len(self.observations)
+
     def __repr__(self):
         return f"""{type(self).__name__}
     person: {self.person}
