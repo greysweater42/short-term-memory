@@ -71,7 +71,12 @@ y_v = np.array(y_v)
 def main(x_t, y_t, x_v, y_v):
     from xgboost import XGBClassifier
 
-    model = XGBClassifier(max_depth=1)
+    model = XGBClassifier(
+        eval_metric="logloss",
+        reg_alpha=10,
+        colsample_bytree=0.3,
+    )
+
     model.fit(x_t, y_t)
     return calculate_metrics(model, x_t, y_t, x_v, y_v)
 
@@ -85,7 +90,7 @@ with mlflow.start_run():
         "phases": phases,
         "letters": [5],
         "electrodes": e,
-        "additional": "poor tuning",
+        "additional": "better tuning, downsampled",
     }
     mlflow.set_tags(tags)
     mlflow.log_param("model class", parameters.model_class)
