@@ -26,9 +26,22 @@ ds.load_data(
     electrodes=e,
 )
 # ds.concat_phases()
-ds.create_labels(label)
 ds.transform_fourier(n=3300)
 ds.process_fourier(bounds=[bound_high, bound_low], smooth=smooth, stride=stride)
+
+new_ds = []
+
+for person in range(1, 157):
+    dp = [d for d in ds if d.person == person]
+    errors = [d for d in dp if d.response_type == "error"]
+    corrects = np.random.choice([d for d in dp if d.response_type == "correct"], len(errors), replace=False)
+    new_ds += errors
+    new_ds += corrects.tolist()
+
+
+ds.data = new_ds
+
+ds.create_labels(label)
 ds.train_val_divide(val_size=50)
 
 x_t = []
@@ -56,15 +69,11 @@ y_v = np.array(y_v)
 
 
 def main(x_t, y_t, x_v, y_v):
-    from sklearn import svm
+    from xgboost import XGBClassifier
 
-    model = svm.SVC(probability=True)
-    from sklearn.decomposition import PCA
-
-    pca = PCA(20)
-    pca.fit(x_t)
-    model.fit(pca.transform(x_t), y_t)
-    return calculate_metrics(model, pca.transform(x_t), y_t, pca.transform(x_v), y_v)
+    model = XGBClassifier(max_depth=1)
+    model.fit(x_t, y_t)
+    return calculate_metrics(model, x_t, y_t, x_v, y_v)
 
 
 with mlflow.start_run():
@@ -76,7 +85,7 @@ with mlflow.start_run():
         "phases": phases,
         "letters": [5],
         "electrodes": e,
-        "additional": "pca 20",
+        "additional": "poor tuning",
     }
     mlflow.set_tags(tags)
     mlflow.log_param("model class", parameters.model_class)

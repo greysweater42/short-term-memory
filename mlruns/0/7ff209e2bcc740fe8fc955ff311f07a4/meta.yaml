@@ -1,0 +1,15 @@
+artifact_uri: file:///home/tomek/doktorat/code/mlruns/0/7ff209e2bcc740fe8fc955ff311f07a4/artifacts
+end_time: 1636643586389
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 7ff209e2bcc740fe8fc955ff311f07a4
+run_uuid: 7ff209e2bcc740fe8fc955ff311f07a4
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1636643586085
+status: 3
+tags: []
+user_id: tomek
