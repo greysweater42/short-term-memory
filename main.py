@@ -15,12 +15,13 @@ bound_low = 40
 smooth = 9
 stride = 4
 phases = ["delay"]
-letters = [5]
+letters = [5, 6, 7]
 label = "response_type"
+experiment_types = ["M"]
 
 ds = Dataset()
 ds.load_data(
-    experiment_types=["R", "M"],
+    experiment_types=experiment_types,
     loads=letters,
     phases=phases,
     electrodes=e,
@@ -34,8 +35,15 @@ new_ds = []
 for person in range(1, 157):
     dp = [d for d in ds if d.person == person]
     errors = [d for d in dp if d.response_type == "error"]
-    corrects = np.random.choice([d for d in dp if d.response_type == "correct"], len(errors), replace=False)
-    new_ds += errors
+    corrects = [d for d in dp if d.response_type == "correct"]
+    min_len = min(len(errors), len(corrects))
+    corrects = np.random.choice(
+        [d for d in dp if d.response_type == "correct"], min_len, replace=False
+    )
+    errors = np.random.choice(
+        [d for d in dp if d.response_type == "error"], min_len, replace=False
+    )
+    new_ds += errors.tolist()
     new_ds += corrects.tolist()
 
 
@@ -72,6 +80,7 @@ def main(x_t, y_t, x_v, y_v):
     from xgboost import XGBClassifier
 
     model = XGBClassifier(
+        max_depth=1,
         eval_metric="logloss",
         reg_alpha=10,
         colsample_bytree=0.3,
@@ -88,9 +97,10 @@ with mlflow.start_run():
         "class": "error" if label == "response_type" else "RM",
         "data": "fourier",
         "phases": phases,
-        "letters": [5],
+        "letters": letters,
         "electrodes": e,
         "additional": "better tuning, downsampled",
+        "experiment_types": experiment_types,
     }
     mlflow.set_tags(tags)
     mlflow.log_param("model class", parameters.model_class)
