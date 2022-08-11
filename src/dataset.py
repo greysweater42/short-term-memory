@@ -1,3 +1,4 @@
+from cmath import exp
 import json
 import shutil
 from itertools import product
@@ -16,9 +17,6 @@ from src.signal import Signal
 
 
 DATA_CACHE_PATH = Path(".data_cache")
-
-with open("src/params.json") as f:
-    params = json.load(f)
 
 
 def _load_clean_write_raw_data(person: int):
@@ -40,27 +38,54 @@ def _load_clean_write_raw_data(person: int):
                         ob.write_data(data)
 
 
-class Observation(Signal):
-    def __init__(
-        self, person, experiment_type, load, response_type, trial, phase
-    ):
-        super().__init__()
-        self.person = int(person)
-        self.experiment_type = experiment_type
-        self.load = int(load)
-        self.response_type = response_type
-        self.trial = int(trial)
-        self.phase = phase
-        self.path = (
-            DATA_CACHE_PATH
-            / str(self.person)
+from dataclasses import dataclass
+
+with open("src/params.json") as f:
+    params = json.load(f)
+
+
+@dataclass
+class DatasetParameters:
+    # TODO parametes validation
+    experiment_types: List[str] = ["M", "R"]
+    loads: List[int] = [5, 6, 7]
+    response_types: List[str] = ["correct", "error"]
+    phases: List[str] = ["encoding", "delay"]
+    electrodes: List[str] = params["ELECTRODES"]
+
+
+@dataclass
+class ObservationConfig:
+    experiment_type: str
+    load: int
+    response_type: str
+    phase: str
+    person: int = None  # for most of the time we do not need person's id; we filter by other features
+    trial: int = None  # similar to person
+
+    @property
+    def path(self) -> Path:
+        return (
+            Path()
+            / str(self.person if self.person else "*")
             / self.experiment_type
             / str(self.load)
             / self.response_type
-            / str(self.trial)
+            / str(self.trial if self.trial else "*")
             / self.phase
         ).with_suffix(".feather")
-        self.electrodes = None
+
+    @classmethod
+    def from_path(cls, path: Path):
+        person, experiment_type, load, response_type, trial, phase = path.woth_suffix("").parts
+        return cls(
+            experiment_type=experiment_type,
+            load=int(load),
+            response_type=response_type,
+            trial=int(trial),
+            phase=phase,
+            person=int(person),
+        )
 
     def __repr__(self):
         return f"""Observation
@@ -71,34 +96,38 @@ class Observation(Signal):
     trial: {self.trial}
     phase: {self.phase}
     electrodes: {self.electrodes}
-    example data:
-    {self.data.loc[:5]}
         """
 
+
+class Observation(Signal):
+    def __init__(self, observation_config: ObservationConfig) -> None:
+        super().__init__()
+        self.observation_config: ObservationConfig = observation_config
+        self.electrodes: List[str] = None
+        self.data: pd.DataFrame = None
+
+    def __repr__(self):
+        return (
+            self.observation
+            + f"""
+    example data:
+    {self.data.loc[:5]}
+    """
+        )
+
     def _make_parent_dir(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.observation_data.path.parent.mkdir(parents=True, exist_ok=True)
 
     def write_data(self, df):
         self._make_parent_dir()
         feather.write_feather(df, self.path)
 
     def read_data(self, electrodes):
-        self.data = feather.read_feather(self.path)
+        self.data = feather.read_feather(self.observation_config.path)
         self.data["time"] = np.arange(0, len(self.data) / 500, 0.002)
-        self.data = self.data[electrodes]
-        self.electrodes = electrodes
+        # self.data = self.data[electrodes]  # TODO this should not be filtered, unless for efficiency reasons
+        # returns self, so it can be run asynchronously
         return self
-
-    @property
-    def pd_repr(self):
-        return dict(
-            person=self.person,
-            experiment_type=self.experiment_type,
-            load=self.load,
-            response_type=self.response_type,
-            trial=self.trial,
-            phase=self.phase,
-        )
 
 
 class Trial(Signal):
@@ -155,27 +184,63 @@ class Trial(Signal):
         )
 
 
+class DatasetLoader:
+    """loads the data for given parameters"""
+
+    def __init__(self) -> None:
+        self.dataset_parameters: DatasetParameters = None
+        self.observations: List[Observation] = None
+
+    def load(self, dataset_parameters: DatasetParameters):
+        self.dataset_parameters = dataset_parameters
+        self._create_observation_instances()
+        self._read_data()
+
+    def _create_observation_instances(self):
+        observations = []
+        combinations = product(self.experiment_types, self.loads, self.response_types, self.phases)
+        for experiment_type, load, response_type, phase in combinations:
+            observation_config = ObservationConfig(
+                experiment_type=experiment_type, load=load, response_type=response_type, phase=phase
+            )
+            paths = Path(DATA_CACHE_PATH).rglob(observation_config.path)
+            obcs = [ObservationConfig.from_path(path) for path in paths]
+            observations += [Observation(obc) for obc in obcs]
+        self.observations = observations
+
+    def _read_data(self):
+        with Pool(processes=6) as executor:
+            results = executor.imap(
+                partial(self._async_read_data_for_observation, electrodes=self.electrodes), self.observations
+            )
+            observations = []
+            for result in tqdm(results, desc="loading data", total=len(self.observations)):
+                # each observation runs "read_data" method, which saves data internally to its instance and returns
+                # itself
+                observations.append(result)
+            self.observations = observations
+
+    @staticmethod
+    def _async_read_data_for_observation(observation: Observation, electrodes: List[str]):
+        return observation.read_data(electrodes)
+
+
 class Dataset:
-    def __init__(self):
-        self.data = []
-        self.phases = []
-        self.experiment_types = []
-        self.loads = []
-        self.response_types = []
-        self.electrodes = []
+    """dataset is a list of Observations, which can be concatenated, and with methods on this concatenated data"""
+
+    def __init__(self, parameters: DatasetParameters):
+        self.parameters = parameters
+        self.dataset_loader: DatasetLoader = DatasetLoader()
+
+        self.observations: List[Observation] = None
         self.is_phases_leveled = None
         self.is_concat_phases = None
         self.is_wavelet_transformed = None
         self.is_fourier_transformed = None
-        self.is_data_loaded = None
         self.train = None
         self.val = None
         self.labels = None
         self.label_dict = dict()
-
-    def __repr__(self):
-        # TODO with labels
-        pass
 
     def __getitem__(self, idx):
         return self.data[idx]
@@ -183,19 +248,23 @@ class Dataset:
     def __len__(self):
         return len(self.data)
 
-    def create_labels(self, dimension):
-        str_labels = [getattr(d, dimension) for d in self.data]
-        labels_names = getattr(self, dimension + "s")
-        self.labels = np.array([s == labels_names[0] for s in str_labels]).astype(int)
+    def load(self):
+        self.dataset_loader.load()
+        self.observations = self.dataset_loader.observations
+
+    def create_labels(self, dimension: str):
+        str_labels = [observation.__dict__[dimension] for observation in self.observations]
+        self.parameters
+        labels_name = dimension + "s"  # TODO smells bad
+
+        self.labels = np.array([s == labels_name for s in str_labels]).astype(int)
         labels = zip(reversed(labels_names), range(len(labels_names)))
         self.labels_dict = {label: num for label, num in labels}
 
     def write_data_cache(self, cpus: int = None):
         if not cpus:
             cpus = cpu_count() // 2
-        ps = [
-            int(p.stem[4:]) for p in DATA_RAW_PATH.iterdir() if p.stem.startswith("sub")
-        ]
+        ps = [int(p.stem[4:]) for p in DATA_RAW_PATH.iterdir() if p.stem.startswith("sub")]
         persons = sorted(ps)
         if DATA_CACHE_PATH.exists():
             shutil.rmtree(DATA_CACHE_PATH)
@@ -204,43 +273,6 @@ class Dataset:
         with Pool(cpus) as executor:
             results = executor.imap(_load_clean_write_raw_data, persons)
             [_ for _ in tqdm(results, total=len(persons))]
-
-    def load_data(
-        self,
-        experiment_types: List[str] = ["M", "R"],
-        loads: List[int] = [5, 6, 7],
-        response_types: List[str] = ["correct", "error"],
-        phases: List[str] = ["encoding", "delay"],
-        electrodes: List[str] = params["ELECTRODES"],
-    ):
-        self.phases = phases
-        self.loads = loads
-        self.experiment_types = experiment_types
-        self.response_types = response_types
-        self.electrodes = electrodes
-        all_obs = []
-        combs = product(experiment_types, loads, response_types, phases)
-        for exp_type, load, response_type, phase in combs:
-            regex = f"*/{exp_type}/{load}/{response_type}/*/{phase}.feather"
-            paths = Path(DATA_CACHE_PATH).rglob(regex)
-            obs = [Observation(*p.with_suffix("").parts[-6:]) for p in paths]
-            all_obs += obs
-        with Pool(processes=6) as executor:
-            results = executor.imap(
-                partial(self._async_load_data, electrodes=electrodes), all_obs
-            )
-            for r in tqdm(results, desc="loading data", total=len(all_obs)):
-                self.data.append(r)
-            self.is_data_loaded = True
-
-    @staticmethod
-    def _async_load_data(x, electrodes):
-        return x.read_data(electrodes)
-
-    # def unload_time_domain_data(self):
-    #     for d in data:
-    #         d.unload_time_domain_data()
-    #     self.is_data_loaded = False
 
     def concat_phases(self, level_phases=False):
         phase_limits = dict()
@@ -273,3 +305,10 @@ class Dataset:
     def process_fourier(self, *args, **kwargs):
         for d in tqdm(self.data, desc="processing fouriers"):
             d.fourier_process(*args, **kwargs)
+
+
+loader = DatasetLoader(DatasetParameters(experiment_type=["M"], loads=[5, 6]))
+loader.load()
+
+dataset = Dataset(params=DatasetParameters())
+dataset.load()
