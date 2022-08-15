@@ -1,88 +1,66 @@
-from src.dataset import Dataset
-from src.metrics import calculate_metrics
-import numpy as np
-import mlflow
-from collections import defaultdict
+# import mlflow
+from src.models import Model
+from src.models.xgb import XGB
+from src.dataset import DatasetConfig, Dataset
+from src.transformers import FourierTransfomer, PhasesToNumpyTransformer
+from src.metrics import Metrics
+from dataclasses import dataclass
+from typing import Optional
 
 
-def _recursive_defaultdict():
-    return defaultdict(_recursive_defaultdict)
+@dataclass
+class Analysis:
+    dataset: Dataset
+    model: Model
+    metrics: Optional[Metrics] = None
+
+    def run(self):
+        self.dataset.load()
+        self.dataset.transform()
+        self.model.train()
+        self.metrics = Metrics(self.model, self.dataset.y)
+        self.metrics.calculate()
 
 
-e = ["Fz", "P3", "P4"]
-bound_high = 1
-bound_low = 40
-smooth = 9
-stride = 4
-phases = ["delay"]
-letters = [5]
-label = "response_type"
+def get_analysis() -> Analysis:
+    dataset_parameters = DatasetConfig(
+        experiment_types=["M", "R"],
+        num_letters=[5],
+        response_types=["correct", "error"],
+        # TODO what happens when we apply two phases?
+        phases=["delay"],
+        electrodes=["Fz", "P3", "P4"],
+    )
+    transformers = [
+        FourierTransfomer(postprocess=True, bounds=(1, 40), smooth=9, stride=4),
+        PhasesToNumpyTransformer(),
+        # TODO: PCATransformer
+    ]
 
-ds = Dataset()
-ds.load_data(
-    experiment_types=["R", "M"],
-    loads=letters,
-    phases=phases,
-    electrodes=e,
-)
-# ds.concat_phases()
-ds.create_labels(label)
-ds.transform_fourier(n=3300)
-ds.process_fourier(bounds=[bound_high, bound_low], smooth=smooth, stride=stride)
-ds.train_val_divide(val_size=50)
-
-x_t = []
-x_v = []
-y_t = []
-y_v = []
-for ll, d in ds.train:
-    fs = []
-    for el in e:
-        fs.append(d.fouriers[el].processed[0].coef_)
-    x_t.append(np.concatenate(fs))
-    y_t.append(ll)
-
-for ll, d in ds.val:
-    fs = []
-    for el in e:
-        fs.append(d.fouriers[el].processed[0].coef_)
-    x_v.append(np.concatenate(fs))
-    y_v.append(ll)
-
-x_t = np.array(x_t)
-x_v = np.array(x_v)
-y_t = np.array(y_t)
-y_v = np.array(y_v)
+    dataset = Dataset(parameters=dataset_parameters, transformers=transformers)
+    model = XGB(dataset=dataset)
+    return Analysis(dataset=dataset, model=model)
 
 
-def main(x_t, y_t, x_v, y_v):
-    from sklearn import svm
+if __name__ == "__main__":
+    analysis = get_analysis()
+    analysis.run()
 
-    model = svm.SVC(probability=True)
-    from sklearn.decomposition import PCA
-
-    pca = PCA(20)
-    pca.fit(x_t)
-    model.fit(pca.transform(x_t), y_t)
-    return calculate_metrics(model, pca.transform(x_t), y_t, pca.transform(x_v), y_v)
-
-
-with mlflow.start_run():
-    metrics, parameters = main(x_t, y_t, x_v, y_v)
-    metrics
-    tags = {
-        "class": "error" if label == "response_type" else "RM",
-        "data": "fourier",
-        "phases": phases,
-        "letters": [5],
-        "electrodes": e,
-        "additional": "pca 20",
-    }
-    mlflow.set_tags(tags)
-    mlflow.log_param("model class", parameters.model_class)
-    mlflow.log_metric("acc_train", metrics.acc_train)
-    mlflow.log_metric("acc_val", metrics.acc_val)
-    mlflow.log_metric("precision", metrics.precision)
-    mlflow.log_metric("recall", metrics.recall)
-    mlflow.log_metric("specificity", metrics.specificity)
-    mlflow.log_metric("auc", metrics.auc)
+# with mlflow.start_run():
+# TODO check if mlflow can measure times of steps: dataset load, transform, model train and metrics
+# tags = {
+#     # "class": "error" if label == "response_type" else "RM",
+#     "data": [tr.__class__ for tr in analysis.dataset.transformers],
+#     "phases": analysis.dataset.parameters.phases,
+#     "letters": analysis.dataset.parameters.num_letters,
+#     "electrodes": analysis.dataset.parameters.electrodes,
+#     "additional": "pca 20",
+# }
+# mlflow.set_tags(tags)
+# mlflow.log_param("model class", analysis.parameters.model.__class__)
+# mlflow.log_metric("acc_train", analysis.metrics.acc_train)
+# mlflow.log_metric("acc_val", analysis.metrics.acc_val)
+# mlflow.log_metric("precision", analysis.metrics.precision)
+# mlflow.log_metric("recall", analysis.metrics.recall)
+# mlflow.log_metric("specificity", analysis.metrics.specificity)
+# mlflow.log_metric("auc", analysis.metrics.auc)

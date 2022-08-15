@@ -1,4 +1,7 @@
-from src.dataset import Dataset
+# 
+# NOT REFACTORED YET
+# 
+from src.dataset.dataset import Dataset
 import numpy as np
 from pathlib import Path
 import torch.nn as nn
@@ -27,20 +30,6 @@ torch.manual_seed(0)
 
 
 def get_data(force_reload=False):
-    if (
-        Path("labels.npy").exists()
-        and Path("wavelets.npy").exists()
-        and Path("persons.npy").exists()
-        and not force_reload
-    ):
-        with open("wavelets.npy", "rb") as f:
-            wavelets = np.load(f)
-        with open("labels.npy", "rb") as f:
-            labels = np.load(f)
-        with open("persons.npy", "rb") as f:
-            persons = np.load(f)
-        return wavelets, labels, persons
-
     ds = Dataset()
     data = ds.get_data(
         exp_types=["R", "M"],
@@ -55,14 +44,6 @@ def get_data(force_reload=False):
     wavelets = np.array([np.expand_dims(d.wavelets["T5"]["c"], 0) for d in data])
     labels = np.array([int(d.experiment_type == "M") for d in data])
     persons = np.array([d.person for d in data])
-
-    with open("wavelets.npy", "wb") as f:
-        np.save(f, wavelets)
-    with open("labels.npy", "wb") as f:
-        np.save(f, labels)
-    with open("persons.npy", "wb") as f:
-        np.save(f, persons)
-
     return wavelets, labels, persons
 
 
