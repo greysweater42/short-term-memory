@@ -5,6 +5,8 @@ from .model import Model
 
 
 # TODO to rethink: this could potentially inherit from xgb, and train could get the dataset as parameter
+# on the other hand if it inherited from XGBClassifier, it would have to also inherit from Model to ensure the "train"
+# method is present; multiple inheritance may be the solution, even though it brings higher complexity
 class XGB(Model):
     def __init__(self, dataset: Dataset) -> None:
         self.dataset: Dataset = dataset
