@@ -1,4 +1,4 @@
-from src.dataset import Dataset
+from src.dataset.dataset import Dataset
 import numpy as np
 from pathlib import Path
 import torch.nn as nn

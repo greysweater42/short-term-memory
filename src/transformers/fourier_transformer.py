@@ -1,12 +1,15 @@
 import pandas as pd
 from scipy.fft import fft, fftfreq
 import numpy as np
-from typing import Union, Tuple
+from typing import List, Union, Tuple
+from .transformer import Transformer
+from src.phase import Phase
 
 
-class FourierTransfomer:
+class FourierTransfomer(Transformer):
     """transforms a given signal from time domain to frequency domain using Fourier transform;
     possible postprocessing with low and high bound filters and smoothing"""
+    # TODO describe parameters: bounds, smooth and stride
 
     def __init__(
         self, postprocess: bool = False, bounds: Tuple[int, int] = None, smooth: int = None, stride: int = None
@@ -16,16 +19,25 @@ class FourierTransfomer:
         self.smooth: int = smooth
         self.stride: int = stride
 
-    def transform(self, x: Union[pd.Series, pd.DataFrame]) -> Union[pd.Series, pd.DataFrame]:
-        if isinstance(x, pd.Series):
-            return self._transform_single_channel(x)
-        elif isinstance(x, pd.DataFrame):
-            transformed = []
-            for channel in x.columns:
-                transformed.append(self._transform_single_channel(x[channel]))
-            return pd.concat(transformed)
+    def transform(self, x: Union[pd.DataFrame, List[Phase]]) -> Union[pd.Series, pd.DataFrame]:
+        """x is either an eeg with channels in the following columns or a list of phases, which contain such eegs"""
+        if isinstance(x, pd.DataFrame):
+            return self._transform_dataframe(x)
+        elif isinstance(x, list):
+            phases = []
+            for phase in x:
+                if not isinstance(x, Phase):
+                    return Exception("signal should be of type pd.DataFrame or list of pd.DataFrames")
+                phases.append(self._transform_dataframe(phase.eeg))
+            return phases
         else:
-            return Exception("signal should be of type pd.Series or pd.DataFrame")
+            return Exception("signal should be of type pd.DataFrame or list of pd.DataFrames")
+
+    def _transform_dataframe(self, x: pd.DataFrame) -> pd.DataFrame:
+        transformed = []
+        for channel in x.columns:
+            transformed.append(self._transform_single_channel(x[channel]))
+        return pd.concat(transformed)
 
     def _transform_single_channel(self, x: pd.Series) -> pd.Series:
         # more details on fourier transform in Python:

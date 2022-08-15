@@ -1,4 +1,4 @@
-from src.dataset import Dataset
+from src.dataset.dataset import Dataset
 import pandas as pd
 from tqdm import tqdm
 import numpy as np

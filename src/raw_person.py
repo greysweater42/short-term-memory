@@ -1,28 +1,32 @@
-from typing import List
+from typing import List, Dict, Union
 
 import mne
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 import config
 from dataclasses import dataclass
 from src.filter_out_noise import filter_out_noise
 
-from src.trial import get_trial_response, check_is_raw_trial_valid, EVENTS as TRIAL_EVENTS
-from src.phase import Phase, PHASES
-from pydantic import ValidationError
+from src.trial import Trial, EVENTS
+from src.phase import Phase
 
-# mne.set_config("MNE_LOGGING_LEVEL", "ERROR")
+import warnings
+from .utils import timeit
+from multiprocessing import Pool
+from functools import partial
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def write_raw_persons_to_cache():
     # TODO docstring
-    # TODO this should be done asynchronously
+    # TODO there should be a console API (in click) to run this function
+    # TODO this api could also have a function for downloading data
     for path in config.DATA_RAW_PATH.iterdir():
         if path.is_dir() and path.name.startswith("sub-"):
             raw_person: RawPerson = RawPerson(person_id=int(path.name[-3:]))
             raw_person.load()
-            raw_person.save_preprocessed_trials_to_cache()
+            raw_person.save_preprocessed_phases()
 
 
 @dataclass
@@ -49,17 +53,19 @@ class RawPerson:
     """
 
     def __init__(self, person_id: int):
-        self.person_id = person_id
+        self.person_id: int = person_id
         self.eeg: pd.DataFrame = None  # time (measurement every 2ms) in rows, channels in columns
         self.events: pd.DataFrame = None
         self.phases: List[Phase] = None
 
+    @timeit
     def load(self):
         """loads raw data into self.data and applies basic preprocessing"""
         self._read()
         self._apply_filters()
-        self._extract_phases()
+        self._extract_phases_from_trials()
 
+    @timeit
     def _read(self):
         # data are stored in several files, which are interconnected
         person_str = f"sub-{self.person_id:03}"
@@ -71,56 +77,43 @@ class RawPerson:
         eeg = data.get_data()
 
         # the easiest way to store 3 input files is in these two variables
-        self.eeg = pd.DataFrame(eeg.transpose(), columns=channels["name"])
+        self.eeg = pd.DataFrame(eeg.transpose(), columns=channels["name"].to_list())
         self.eeg.index = (np.arange(len(self.eeg)) + 1) / 500  # measurements are done every 2ms
-        self.events = pd.read_csv(path / RawFilenames.events.format(person_str), sep="\t")
+        events_path = path / RawFilenames.events.format(person_str)
+        self.events = pd.read_csv(events_path, sep="\t", index_col="onset", usecols=["onset", "trial_type"])
 
+    @timeit
     def _apply_filters(self):
-        """apply noise filters to all the channels"""
-        # TODO wouldn't logging be better to tqdm?
-        desc = f"person: {self.person_id}, applying filters"
-        for channel in tqdm(self.eeg.columns, desc=desc):
-            self.eeg[channel] = filter_out_noise(self.eeg[channel])
+        filtered_eeg: List[pd.Series] = []
+        with Pool(config.CPUs) as executor:
+            results = executor.map(filter_out_noise, [self.eeg[channel] for channel in self.eeg.columns])
+            for result in results:
+                filtered_eeg.append(result)
+        self.eeg = pd.concat(filtered_eeg, axis=1)
 
-    def _extract_phases(self) -> None:
+    @timeit
+    def _extract_phases_from_trials(self) -> None:
         self._add_trial_id_to_events()
+        self.phases: List[Phase] = []
 
-        for trial_id, trial in self.events.groupby("trial_id"):
-            if not check_is_raw_trial_valid(trial):
-                continue
-
-            # for convenience: it will be easier to access specific rows by their "name", not .startswith
-            rows = {}
-            for trial_event_name, trial_event_data in TRIAL_EVENTS.items():
-                rows[trial_event_name] = trial[trial["trial_type"].str.startswith(trial_event_data)]
-
-            num_letters = rows["baseline"]["trial_type"].iloc[0][-3]
-            type_ = rows["baseline"]["trial_type"].iloc[0][-2]
-            response_type = get_trial_response(rows["response"]["trial_type"].iloc[0])
-
-            self.phases: List[Phase] = []
-            for phase_name, (event_start, event_end) in PHASES:
-                start = rows[event_start]["onset"].iloc[0]
-                end = rows[event_end]["onset"].iloc[0]
-                try:
-                    phase = Phase(
-                        name=phase_name,
-                        trial_id=trial_id,
-                        person_id=self.person_id,
-                        num_letters=num_letters,
-                        type_=type_,
-                        response_type=response_type,
-                        eeg=self.eeg[self.eeg.index.between(start, end)],
-                    )
-                except ValidationError:
-                    continue
-                self.phases.append(phase)
+        all_kwargs: List[Dict[str, Union[str, int, pd.DataFrame]]] = []
+        for trial_id, trial_df in self.events.groupby("trial_id"):
+            start = trial_df.index.min()
+            end = trial_df.index.max()
+            eeg = self.eeg[self.eeg.index.to_series().between(start, end, inclusive="left")]
+            all_kwargs.append(dict(person_id=self.person_id, eeg=eeg, trial_df=trial_df, trial_id=trial_id))
+        with Pool(config.CPUs) as executor:
+            trials_tasks = [
+                executor.apply_async(partial(Trial.extract_phases_from_args, **kwargs)) for kwargs in all_kwargs
+            ]
+            for trial_task in trials_tasks:
+                self.phases += trial_task.get()
 
     def _add_trial_id_to_events(self):
         """each trial gets a unique id: an integer. trial is defined as a "start" event and all the events until the
         next "start" event"""
         self.events["trial_id"] = 0
-        trial_starts_cond = self.events["trial_type"].startswith(TRIAL_EVENTS["start"])
+        trial_starts_cond = self.events["trial_type"].str.startswith(EVENTS["start"])
         self.events.loc[trial_starts_cond, "trial_id"] = range(1, sum(trial_starts_cond) + 1)
         self.events["trial_id"].replace(to_replace=0, method="ffill", inplace=True)
 

@@ -1,60 +1,66 @@
-from src.dataset import Dataset
-from src.metrics import calculate_metrics
-import mlflow
+# import mlflow
+from src.models import Model
+from src.models.xgb import XGB
+from src.dataset import DatasetConfig, Dataset
+from src.transformers import FourierTransfomer, PhasesToNumpyTransformer
+from src.metrics import Metrics
+from dataclasses import dataclass
+from typing import Optional
 
 
-# %%
-from src.dataset import DatasetParameters, Dataset
-dataset_parameters = DatasetParameters(
-    experiment_types=["M", "R"],
-    num_letters=[5],
-    response_types=["correct", "error"],
-    phases=["delay"],
-    electrodes=["Fz", "P3", "P4"]
-)
-ds = Dataset(parameters=dataset_parameters)
-ds.load()
-ds.transform_fourier(postprocess=True, bounds=(1, 40, ), smooth=9, stride=4)
+@dataclass
+class Analysis:
+    dataset: Dataset
+    model: Model
+    metrics: Optional[Metrics] = None
 
-from src.model_preprocess_utils import merge_electrodes_for_each_phase
-import pandas as pd
-
-eegs_flat = merge_electrodes_for_each_phase(ds.phases)
-X = pd.concat(eegs_flat).transpose()  # each phase in each row
-y = [phase.response_type for phase in ds.phases]
+    def run(self):
+        self.dataset.load()
+        self.dataset.transform()
+        self.model.train()
+        self.metrics = Metrics(self.model, self.dataset.y)
+        self.metrics.calculate()
 
 
-def main(X, y):
-    from sklearn import svm
-    from sklearn.model_selection import train_test_split
+def get_analysis() -> Analysis:
+    dataset_parameters = DatasetConfig(
+        experiment_types=["M", "R"],
+        num_letters=[5],
+        response_types=["correct", "error"],
+        # TODO what happens when we apply two phases?
+        phases=["delay"],
+        electrodes=["Fz", "P3", "P4"],
+    )
+    transformers = [
+        FourierTransfomer(postprocess=True, bounds=(1, 40), smooth=9, stride=4),
+        PhasesToNumpyTransformer(),
+        # TODO: PCATransformer
+    ]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    dataset = Dataset(parameters=dataset_parameters, transformers=transformers)
+    model = XGB(dataset=dataset)
+    return Analysis(dataset=dataset, model=model)
 
-    model = svm.SVC(probability=True)
-    from sklearn.decomposition import PCA
 
-    pca = PCA(20)
-    pca.fit(X_train)
-    model.fit(pca.transform(X_train), y_train)
-    return calculate_metrics(model, pca.transform(X_train), y_train, pca.transform(X_test), y_test)
-
+if __name__ == "__main__":
+    analysis = get_analysis()
+    analysis.run()
 
 # with mlflow.start_run():
-#     metrics, parameters = main(x_t, y_t, x_v, y_v)
-#     metrics
-#     tags = {
-#         "class": "error" if label == "response_type" else "RM",
-#         "data": "fourier",
-#         "phases": phases,
-#         "letters": [5],
-#         "electrodes": e,
-#         "additional": "pca 20",
-#     }
-#     mlflow.set_tags(tags)
-#     mlflow.log_param("model class", parameters.model_class)
-#     mlflow.log_metric("acc_train", metrics.acc_train)
-#     mlflow.log_metric("acc_val", metrics.acc_val)
-#     mlflow.log_metric("precision", metrics.precision)
-#     mlflow.log_metric("recall", metrics.recall)
-#     mlflow.log_metric("specificity", metrics.specificity)
-#     mlflow.log_metric("auc", metrics.auc)
+# TODO check if mlflow can measure times of steps: dataset load, transform, model train and metrics
+# tags = {
+#     # "class": "error" if label == "response_type" else "RM",
+#     "data": [tr.__class__ for tr in analysis.dataset.transformers],
+#     "phases": analysis.dataset.parameters.phases,
+#     "letters": analysis.dataset.parameters.num_letters,
+#     "electrodes": analysis.dataset.parameters.electrodes,
+#     "additional": "pca 20",
+# }
+# mlflow.set_tags(tags)
+# mlflow.log_param("model class", analysis.parameters.model.__class__)
+# mlflow.log_metric("acc_train", analysis.metrics.acc_train)
+# mlflow.log_metric("acc_val", analysis.metrics.acc_val)
+# mlflow.log_metric("precision", analysis.metrics.precision)
+# mlflow.log_metric("recall", analysis.metrics.recall)
+# mlflow.log_metric("specificity", analysis.metrics.specificity)
+# mlflow.log_metric("auc", analysis.metrics.auc)
