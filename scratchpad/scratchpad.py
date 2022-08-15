@@ -202,3 +202,14 @@
 #                             )
 #                             ob.write_data(data)
 
+
+
+# @timeit
+# def _apply_filters(self):
+#     """apply noise filters to all the channels"""
+#     # TODO wouldn't logging be better to tqdm?
+#     # desc = f"person: {self.person_id}, applying filters"
+#     # for channel in tqdm(self.eeg.columns, desc=desc):
+#     # TODO this should run asynchronously
+#     for channel in self.eeg.columns:
+#         self.eeg[channel] = filter_out_noise(self.eeg[channel])

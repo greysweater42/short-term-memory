@@ -126,3 +126,8 @@
 #     @staticmethod
 #     def moving_average_1D(x, w):
 #         return np.convolve(x, np.ones(w), "valid") / w
+
+    # def plot(self, e):
+    #     # TODO different plots depending on state; thic can actually be a factory
+    #     ix = sum(self.fouriers[e]["f"] < 50)
+    #     plt.plot(self.fouriers[e]["f"][ix], self.fouriers[e]["c"][ix])
