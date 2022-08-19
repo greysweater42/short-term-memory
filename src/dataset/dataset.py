@@ -11,7 +11,7 @@ from .dataset_config import DatasetConfig, MLMappings
 from multiprocessing import Pool
 from src.utils import pluralize, timeit
 from sklearn.model_selection import train_test_split
-from .train_or_test_dataset import TrainOrTestDataset
+from .train_and_test_dataset import TrainDataset, TestDataset, TrainAndTestDataset
 
 
 class Dataset:
@@ -26,20 +26,20 @@ class Dataset:
         self.y: pd.Series = None
 
     @property
-    def train(self) -> TrainOrTestDataset:
-        return TrainOrTestDataset(X=self.X, y=self.y, is_train=True)
+    def train(self) -> TrainDataset:
+        return TrainDataset(X=self.X, y=self.y)
 
     @property
-    def test(self) -> TrainOrTestDataset:
-        return TrainOrTestDataset(X=self.X, y=self.y, is_train=False)
+    def test(self) -> TestDataset:
+        return TestDataset(X=self.X, y=self.y)
 
     @timeit
     def load(self):
         self.X: List[Observation] = []  # makes this method idempotent
 
         with Pool(config.CPUs) as executor:
-            products = list(self.config.combinations)
-            results = executor.imap(self._load_observations, products)
+            combinations = list(self.config.combinations)
+            results = executor.imap(self._load_observations, combinations)
             for result in results:
                 self.X += result
 
@@ -71,6 +71,6 @@ class Dataset:
         np.random.seed(0)
         # stratification by label and person_id - we want to be able to predict for new patients
         stratify = list(zip([observation.person_id for observation in self.X], self.y))
-        TrainOrTestDataset.train_samples_idxs, TrainOrTestDataset.test_sample_idxs = train_test_split(
+        TrainAndTestDataset.train_samples_idxs, TrainAndTestDataset.test_sample_idxs = train_test_split(
             np.arange(len(self.y)), test_size=0.2, stratify=stratify
         )

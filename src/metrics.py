@@ -1,7 +1,7 @@
 import numpy as np
 from pydantic import BaseModel
 from src.models import Model
-from src.dataset import Dataset, TrainOrTestDataset
+from src.dataset import Dataset, TrainAndTestDataset
 
 
 class MetricsReport(BaseModel):
@@ -20,7 +20,7 @@ class Metrics:
             reports[name] = self._generate_report(ds=ds)
         return reports
 
-    def _generate_report(self, ds: TrainOrTestDataset) -> MetricsReport:
+    def _generate_report(self, ds: TrainAndTestDataset) -> MetricsReport:
         return MetricsReport(
             accuracy=np.mean(self.model.predict(ds.X) == ds.y),
             samples_imbalance=ds.y.mean(),

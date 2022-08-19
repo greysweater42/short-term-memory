@@ -37,7 +37,6 @@ class DatasetConfig(BaseModel):
                 if subvalue not in proper_values:
                     raise ValueError(f"{name} must be from the list {proper_values}; {name} is not")
         return values
-        # return named_product(experiment_types=self.experiment_types, num_letters=self.num_letters, response_types=self.response_types, phases=self.phases)
 
     @property
     def combinations(self) -> product:
