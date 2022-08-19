@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 
 from .model import Model
-from src.models.model import Model
 from src.utils import timeit
 
 
@@ -15,10 +14,10 @@ class XGBClassifier(Model):
         self.dataset: Dataset = dataset
         self.model = xgboost.XGBClassifier(*args, **kwargs)
 
-    # TODO train test split
     @timeit
     def train(self):
-        self.model.fit(self.dataset.X, self.dataset.y)
+        # TODO to be consistent with predict method, dataset could be provided as the arguments to train
+        self.model.fit(self.dataset.train.X, self.dataset.train.y)
 
     def predict(self, X: pd.DataFrame) -> np.array:
         return self.model.predict(X)

@@ -29,7 +29,7 @@ def get_analysis() -> Analysis:
         response_types=["correct", "error"],
         # TODO what happens when we apply two phases?
         phases=["delay"],
-        electrodes=["Fz", "P3", "P4"],
+        electrodes=["Fz"],
     )
     transformers = [
         FourierTransfomer(postprocess=True, bounds=(1, 40), smooth=9, stride=4),
