@@ -1,20 +1,27 @@
 from src.dataset import Dataset
-from xgboost import XGBClassifier
+import xgboost
+import numpy as np
+import pandas as pd
 
 from .model import Model
+from src.models.model import Model
+from src.utils import timeit
 
 
-# TODO to rethink: this could potentially inherit from xgb, and train could get the dataset as parameter
-# on the other hand if it inherited from XGBClassifier, it would have to also inherit from Model to ensure the "train"
-# method is present; multiple inheritance may be the solution, even though it brings higher complexity
-class XGB(Model):
-    def __init__(self, dataset: Dataset) -> None:
+class XGBClassifier(Model):
+    # you can't simply inherit from sklearn. this is a well-know issue
+    # https://github.com/scikit-learn/scikit-learn/issues/13555
+    def __init__(self, dataset: Dataset, *args, **kwargs) -> None:
         self.dataset: Dataset = dataset
-        self.model = XGBClassifier(max_depth=2)
+        self.model = xgboost.XGBClassifier(*args, **kwargs)
 
     # TODO train test split
+    @timeit
     def train(self):
         self.model.fit(self.dataset.X, self.dataset.y)
+
+    def predict(self, X: pd.DataFrame) -> np.array:
+        return self.model.predict(X)
 
 # def main(X, y):
 #     from sklearn import svm

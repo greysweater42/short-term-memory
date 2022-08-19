@@ -5,6 +5,7 @@ import pandas as pd
 
 # TODO move to FourierTransformer
 def filter_out_noise(eeg: pd.Series) -> pd.Series:
+    # TODO use Fourier and Freq Transformers
     """filters out unwanted frequencies;
     some current frequencies are typical for electricity providers and they add noise to the data;
     this function filters them out. Also high-pass and low-pass filters are applied on frequencies

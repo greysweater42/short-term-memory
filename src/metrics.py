@@ -1,7 +1,7 @@
 import numpy as np
 from pydantic import BaseModel
 from src.models import Model
-import pandas as pd
+from src.dataset import Dataset
 
 
 class MetricsReport(BaseModel):
@@ -9,12 +9,12 @@ class MetricsReport(BaseModel):
 
 
 class Metrics:
-    def __init__(self, model: Model, y: pd.Series) -> None:
+    def __init__(self, model: Model, dataset: Dataset) -> None:
         self.model = model
-        self.y = y
+        self.dataset = dataset
 
     def calculate(self):
-        return MetricsReport(accuracy=np.mean(self.model.predict() == self.y))
+        return MetricsReport(accuracy=np.mean(self.model.predict(self.dataset.X) == self.dataset.y))
 
 
 # from collections import namedtuple

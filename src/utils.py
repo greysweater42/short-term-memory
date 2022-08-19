@@ -42,3 +42,8 @@ def timeit(func):
         return result
 
     return timed
+
+
+def pluralize(string: str) -> str:
+    """adds "s" to the end of a string if it is not present"""
+    return string if string[-1] == "s" else string + "s"

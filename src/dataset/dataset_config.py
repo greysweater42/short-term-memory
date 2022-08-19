@@ -1,30 +1,22 @@
-from itertools import product
-from typing import List, Any
+from typing import List, Dict
 
-from pydantic import BaseModel, validator
-from src.phase import PHASES
+from pydantic import BaseModel, root_validator
+from src.dataset_info import DatasetInfo
+from itertools import product, starmap
+from collections import namedtuple
 
-from .electrodes import ELECTRODES
+
+def named_product(**items):
+    """cartesian product of several lists/sets, but each field is named by a namedtuple "Product" """
+    Product = namedtuple('Product', items.keys())
+    return starmap(Product, product(*items.values()))
 
 
-class DatasetConfigProperValues:
-    """possible values for each of the dataset parameters"""
+class MLMappings:
+    """integer values are used for machine learning models, which require numeric values"""
 
-    experiment_types: List[int] = ["M", "R"]
-    num_letters: List[int] = [5, 6, 7]
-    response_types: List[str] = ["correct", "error"]
-    phases: List[str] = list(PHASES)
-    electrodes: List[str] = ELECTRODES
-
-    def __getitem__(self, key: str):
-        return getattr(self, key)
-
-    @classmethod
-    def validate(cls, v: Any, field_name: str) -> Any:
-        proper_values = cls[field_name]
-        if v not in proper_values:
-            raise ValueError(f"{field_name} must be from the list {proper_values}; {v} is not")
-        return v
+    experiment_types: Dict[str, int] = {"M": 1, "R": 0}
+    response_types: Dict[str, int] = {"correct": 1, "wrong": 0}
 
 
 class DatasetConfig(BaseModel):
@@ -33,31 +25,19 @@ class DatasetConfig(BaseModel):
 
     experiment_types: List[str] = ["M", "R"]
     num_letters: List[int] = [5, 6, 7]
-    response_types: List[str] = ["correct", "error"]
+    response_types: List[str] = ["correct", "wrong"]
     phases: List[str] = ["delay"]
-    electrodes: List[str] = ELECTRODES
+    electrodes: List[str] = DatasetInfo.electrodes
 
-    # TODO I wonder if there is an easier way to validate those values, maybe even without pydantic, since this
-    # "validator" decorator results in a lot of duplication
-    @validator("experiment_types", each_item=True)
-    def check_experiment_type(cls, v: int) -> int:
-        return DatasetConfigProperValues.validate(v, "experiment_types")
-
-    @validator("num_letters", each_item=True)
-    def check_num_letters(cls, v: int) -> int:
-        return DatasetConfigProperValues.validate(v, "num_letters")
-
-    @validator("response_types", each_item=True)
-    def check_response_types(cls, v: str) -> str:
-        return DatasetConfigProperValues.validate(v, "response_types")
-
-    @validator("phases", each_item=True)
-    def check_phases(cls, v: str) -> str:
-        return DatasetConfigProperValues.validate(v, "phases")
-
-    @validator("electrodes", each_item=True)
-    def check_electrodes(cls, v: str) -> str:
-        return DatasetConfigProperValues.validate(v, "electrodes")
+    @root_validator
+    def check_values(cls, values: Dict) -> int:
+        for name, value in values.items():
+            for subvalue in value:
+                proper_values = DatasetInfo.get(name)
+                if subvalue not in proper_values:
+                    raise ValueError(f"{name} must be from the list {proper_values}; {name} is not")
+        return values
+        # return named_product(experiment_types=self.experiment_types, num_letters=self.num_letters, response_types=self.response_types, phases=self.phases)
 
     @property
     def combinations(self) -> product:
