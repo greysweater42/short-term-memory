@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict
 
 import mne
 import numpy as np
@@ -7,8 +7,9 @@ import config
 from dataclasses import dataclass
 from src.filter_out_noise import filter_out_noise
 
-from src.trial import Trial, EVENTS
-from src.phase import Phase
+from src.trial import Trial
+from src.dataset_info import DatasetInfo
+from src.observation import Observation
 
 import warnings
 from .utils import timeit
@@ -26,7 +27,7 @@ def write_raw_persons_to_cache():
         if path.is_dir() and path.name.startswith("sub-"):
             raw_person: RawPerson = RawPerson(person_id=int(path.name[-3:]))
             raw_person.load()
-            raw_person.save_preprocessed_phases()
+            raw_person.save_observations()
 
 
 @dataclass
@@ -49,21 +50,20 @@ class RawPerson:
     https://en.wikipedia.org/wiki/10%E2%80%9320_system_%28EEG%29#/media/File:21_electrodes_of_International_10-20_system_for_EEG.svg
     - trial - part of the survey when a person is e.g. presented with letters and tries to memorize it and answer; there
     are many trials for a person
-    - phase - part of a trial when a person either is preparing, reads the letters, tries to memorize them etc.
     """
 
     def __init__(self, person_id: int):
         self.person_id: int = person_id
         self.eeg: pd.DataFrame = None  # time (measurement every 2ms) in rows, channels in columns
         self.events: pd.DataFrame = None
-        self.phases: List[Phase] = None
+        self.observations: List[Observation] = None
 
     @timeit
     def load(self):
         """loads raw data into self.data and applies basic preprocessing"""
         self._read()
-        self._apply_filters()
-        self._extract_phases_from_trials()
+        # self._apply_filters()
+        self._extract_observations_from_trials()
 
     @timeit
     def _read(self):
@@ -86,37 +86,45 @@ class RawPerson:
     def _apply_filters(self):
         filtered_eeg: List[pd.Series] = []
         with Pool(config.CPUs) as executor:
-            results = executor.map(filter_out_noise, [self.eeg[channel] for channel in self.eeg.columns])
+            # .imap_unordered is slightly faster that .imap, which uses less memory than .map
+            results = executor.imap_unordered(filter_out_noise, [self.eeg[channel] for channel in self.eeg.columns])
             for result in results:
                 filtered_eeg.append(result)
-        self.eeg = pd.concat(filtered_eeg, axis=1)
+        self.eeg = pd.concat(filtered_eeg, axis=1)  # [self.eeg.columns]
 
     @timeit
-    def _extract_phases_from_trials(self) -> None:
+    def _extract_observations_from_trials(self) -> None:
         self._add_trial_id_to_events()
-        self.phases: List[Phase] = []
+        self.observations: List[Observation] = []  # resets observations
 
-        all_kwargs: List[Dict[str, Union[str, int, pd.DataFrame]]] = []
-        for trial_id, trial_df in self.events.groupby("trial_id"):
-            start = trial_df.index.min()
-            end = trial_df.index.max()
-            eeg = self.eeg[self.eeg.index.to_series().between(start, end, inclusive="left")]
-            all_kwargs.append(dict(person_id=self.person_id, eeg=eeg, trial_df=trial_df, trial_id=trial_id))
+        all_kwargs = self._prepare_kwargs_for_multiprocessing()
         with Pool(config.CPUs) as executor:
             trials_tasks = [
-                executor.apply_async(partial(Trial.extract_phases_from_args, **kwargs)) for kwargs in all_kwargs
+                executor.apply_async(partial(Trial.extract_observations_from_args, **kwargs)) for kwargs in all_kwargs
             ]
             for trial_task in trials_tasks:
-                self.phases += trial_task.get()
+                self.observations += trial_task.get()
 
     def _add_trial_id_to_events(self):
         """each trial gets a unique id: an integer. trial is defined as a "start" event and all the events until the
         next "start" event"""
         self.events["trial_id"] = 0
-        trial_starts_cond = self.events["trial_type"].str.startswith(EVENTS["start"])
+        trial_starts_cond = self.events["trial_type"].str.startswith(DatasetInfo.events["start"])
         self.events.loc[trial_starts_cond, "trial_id"] = range(1, sum(trial_starts_cond) + 1)
         self.events["trial_id"].replace(to_replace=0, method="ffill", inplace=True)
 
-    def save_preprocessed_phases(self):
-        for phase in self.phases:
-            phase.save()
+    def _prepare_kwargs_for_multiprocessing(self) -> List[Dict]:
+        all_kwargs: List[Dict] = []
+        for trial_id, trial_df in self.events.groupby("trial_id"):
+            start = trial_df.index.min()
+            end = trial_df.index.max()
+            eeg = self.eeg[self.eeg.index.to_series().between(start, end, inclusive="left")]
+            all_kwargs.append(dict(person_id=self.person_id, eeg=eeg, trial_df=trial_df, trial_id=trial_id))
+        return all_kwargs
+
+    @timeit
+    def save_observations(self):
+        with Pool(config.CPUs) as executor:
+            results = executor.imap(Observation.save, self.observations)
+            for result in results:
+                result

@@ -1,20 +1,30 @@
 import numpy as np
 from pydantic import BaseModel
 from src.models import Model
-import pandas as pd
+from src.dataset import Dataset, TrainOrTestDataset
 
 
 class MetricsReport(BaseModel):
     accuracy: float
+    samples_imbalance: float
 
 
 class Metrics:
-    def __init__(self, model: Model, y: pd.Series) -> None:
+    def __init__(self, model: Model, dataset: Dataset) -> None:
         self.model = model
-        self.y = y
+        self.dataset = dataset
 
     def calculate(self):
-        return MetricsReport(accuracy=np.mean(self.model.predict() == self.y))
+        reports = dict()
+        for name, ds in {"train": self.dataset.train, "test": self.dataset.test}.items():
+            reports[name] = self._generate_report(ds=ds)
+        return reports
+
+    def _generate_report(self, ds: TrainOrTestDataset) -> MetricsReport:
+        return MetricsReport(
+            accuracy=np.mean(self.model.predict(ds.X) == ds.y),
+            samples_imbalance=ds.y.mean(),
+        )
 
 
 # from collections import namedtuple

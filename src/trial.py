@@ -2,8 +2,9 @@ from typing import List, Dict
 
 import pandas as pd
 
-from .events import EVENTS
-from src.phase import Phase, PHASES
+from src.phase import Phase
+from src.observation import Observation
+from src.dataset_info import DatasetInfo
 from pydantic import ValidationError
 
 
@@ -20,63 +21,66 @@ class Trial:
         self.eeg: pd.DataFrame = eeg
         self.person_id: int = person_id
 
+        self.observations: List[Observation] = None
+
     @staticmethod
     def _check_is_trial_df_valid(trial_df: pd.DataFrame) -> bool:
         """checks if a given raw trial dataframe has errors, e.g. wrong number or order of events"""
-        if len(trial_df) != len(EVENTS):
+        if len(trial_df) != len(DatasetInfo.events):
             raise InvalidTrialDF
-        for event_data, event_expected in zip(trial_df["trial_type"], EVENTS.values()):
+        for event_data, event_expected in zip(trial_df["trial_type"], DatasetInfo.events.values()):
             if not event_data.startswith(event_expected):
                 raise InvalidTrialDF
 
-    def extract_phases(self) -> None:
+    def extract_observations(self) -> None:
         rows = self._change_trial_df_to_dict_of_rows()
         num_letters = rows["baseline"]["trial_type"].iloc[0][-3]
-        type_ = rows["baseline"]["trial_type"].iloc[0][-2]
+        experiment_type = rows["baseline"]["trial_type"].iloc[0][-2]
         response_type = self.get_trial_response(rows["response"]["trial_type"].iloc[0])
 
-        phases: List[Phase] = []
-        for phase_name, (event_start, event_end) in PHASES.items():
+        self.observations: List[Observation] = []
+        for phase_name, (event_start, event_end) in DatasetInfo.phases.items():
             start = rows[event_start].index[0]
             end = rows[event_end].index[0]
-            phase = Phase(
-                name=phase_name,
-                trial_id=self.trial_id,
-                person_id=self.person_id,
-                num_letters=num_letters,
-                type_=type_,
-                response_type=response_type,
-                eeg=self.eeg[self.eeg.index.to_series().between(start, end, inclusive="left")],
-            )
-            phases.append(phase)
-        self.phases = phases
+            for electrode in DatasetInfo.electrodes:
+                observation = Observation(
+                    name=phase_name,
+                    trial_id=self.trial_id,
+                    person_id=self.person_id,
+                    num_letters=num_letters,
+                    experiment_type=experiment_type,
+                    response_type=response_type,
+                    electrode=electrode,
+                    eeg=self.eeg.loc[self.eeg.index.to_series().between(start, end, inclusive="left"), electrode],
+                )
+                self.observations.append(observation)
 
     # TODO does this function return a dict of series or dataframes?
     def _change_trial_df_to_dict_of_rows(self) -> Dict[str, pd.Series]:
         """for convenience: it will be easier to access specific rows by their "name", not .startswith"""
         rows = {}
-        for name, startswith in EVENTS.items():
+        for name, startswith in DatasetInfo.events.items():
             rows[name] = self.trial_df[self.trial_df["trial_type"].str.startswith(startswith)]
         return rows
 
     @staticmethod
-    def get_trial_response(response_type: str) -> bool:
-        """dataset has response types as "...correct..." or "...error..." -> this function binarizes them:
-        correct -> True, error -> False"""
+    def get_trial_response(response_type: str) -> str:
+        """dataset has response types as "...correct..." or "...error..." -> this function cleans them:
+        ...correct... -> "correct", ...error... -> "error" """
         if "correct" in response_type:
-            return True
+            return "correct"
         if "error" in response_type:
-            return False
+            return "wrong"
         raise InvalidTrialDF
 
     @classmethod
-    def extract_phases_from_args(
+    def extract_observations_from_args(
         cls, person_id: int, eeg: pd.DataFrame, trial_df: pd.DataFrame, trial_id: int
     ) -> List[Phase]:
         try:
             trial = cls(person_id=person_id, eeg=eeg, trial_df=trial_df, trial_id=trial_id)
-            trial.extract_phases()
-            return trial.phases
+            trial.extract_observations()
+            return trial.observations
         except (ValidationError, InvalidTrialDF):
             # some trials have incorrect data, so we do not extract phases from them at all
             return []

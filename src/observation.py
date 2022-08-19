@@ -5,17 +5,19 @@ from config import DATA_CACHE_PATH
 from typing import Dict, Any
 from src.dataset_info import DatasetInfo
 from src.utils import pluralize
+import numpy as np
 
 
-class Phase(BaseModel):
+class Observation(BaseModel):
     name: str
     trial_id: int
     person_id: int
     num_letters: int
     experiment_type: str
     response_type: str
+    electrode: str
 
-    eeg: pd.DataFrame
+    eeg: pd.Series
 
     class Config:
         # pydantic does not allow exotic types like pd.DataFrame: it needs to be allowed in this Config class
@@ -29,7 +31,7 @@ class Phase(BaseModel):
 
     @root_validator
     def check_list_values(cls, values: Dict[str, Any]) -> int:
-        list_fields_to_validate = ["num_letters", "experiment_type", "response_type"]
+        list_fields_to_validate = ["num_letters", "experiment_type", "response_type", "electrode"]
         list_values = {name: values[name] for name in values if name in list_fields_to_validate}
         for name, value in list_values.items():
             proper_values = DatasetInfo.get(pluralize(name))
@@ -41,9 +43,11 @@ class Phase(BaseModel):
     def from_path(cls, path: Path):
         # TODO maybe data should be stored also for separate electrodes, as a list of observations, even without index:
         # the index is np.arange(0, len(x), 0.002) for all the cases anyway
-        *_, person_id, num_letters, experiment_type, response_type, trial_id, name = path.with_suffix("").parts
-        eeg: pd.DataFrame = pd.read_feather(path)
-        eeg.set_index("index", inplace=True)
+        path_tuple = path.with_suffix("").parts
+        *_, person_id, num_letters, experiment_type, response_type, trial_id, name, electrode = path_tuple
+        eeg: pd.DataFrame = pd.read_feather(path, columns=[electrode])
+        eeg_series = eeg[electrode]
+        eeg_series.index = np.arange(0, len(eeg)) * 0.002
         return cls(
             trial_id=int(trial_id),
             person_id=int(person_id),
@@ -51,7 +55,8 @@ class Phase(BaseModel):
             experiment_type=experiment_type,
             response_type=response_type,
             name=name,
-            eeg=eeg,
+            electrode=electrode,
+            eeg=eeg_series,
         )
 
     @property
@@ -64,6 +69,7 @@ class Phase(BaseModel):
             / self.response_type
             / str(self.trial_id)
             / self.name
+            / self.electrode
         ).with_suffix(".feather")
 
     @staticmethod
@@ -73,6 +79,7 @@ class Phase(BaseModel):
         experiment_type: str = None,
         response_type: str = None,
         name: str = None,
+        electrode: str = None,
     ):
         """used for finding trials which meet specific criterium, e.g. num_letters=6 and person="*" (all persons)"""
         # can't use cls.path because of built-in pydantic validation, which would not accept "*" for int fields
@@ -86,10 +93,15 @@ class Phase(BaseModel):
             / (response_type if response_type else "*")
             / "*"  # we always take all the trials, since their ID is artificial
             / (name if name else "*")
+            / (electrode if electrode else "*")
         ).with_suffix(".feather")
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # TODO I could use some better format, maybe even mongo db with ODM< where every document would be searchable
         # by all the parameters available in self.path
-        self.eeg.reset_index().to_feather(self.path)
+        eeg = self.eeg.reset_index()
+        # index is setup during loading anyway. value "1" is optimal for size of the file; feather needs at least 2
+        # columns
+        # eeg["index"] = 1
+        eeg.to_feather(self.path)
