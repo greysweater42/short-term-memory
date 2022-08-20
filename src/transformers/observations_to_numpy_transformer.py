@@ -9,6 +9,6 @@ class ObservationsToNumpyTransformer(Transformer):
 
     @staticmethod
     def transform(observations: List[Observation], y: np.ndarray) -> List[pd.Series]:
-        eegs = [observation.eeg for observation in observations]
-        # each eeg in each row
-        return pd.concat(eegs, axis=1).to_numpy().transpose(), y
+        eegs = [observation.eeg.to_numpy() for observation in observations]
+        # observations in first dimension (or "rows" in 2 dimensions)
+        return np.stack(eegs), y

@@ -1,4 +1,4 @@
-from src.dataset import Dataset, SubDataset
+from src.dataset import SubDataset
 import xgboost
 import numpy as np
 
