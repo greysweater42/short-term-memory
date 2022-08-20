@@ -1,6 +1,6 @@
 from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
-from src.models.xgb import XGBClassifier
+from src.models import XGBClassifierModel
 from src.metrics import Metrics
 
 from src.transformers import FourierTransfomer, FrequencyTransformer, ObservationsToNumpyTransformer
@@ -26,7 +26,7 @@ dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=tran
 dataset.load()
 dataset.transform()
 
-model = XGBClassifier(dataset=dataset)
+model = XGBClassifierModel(dataset=dataset)
 model.train()
 
 metrics = Metrics(model, dataset)

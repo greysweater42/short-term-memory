@@ -6,7 +6,7 @@ from .model import Model
 from src.utils import timeit
 
 
-class XGBClassifier(Model):
+class XGBClassifierModel(Model):
     # TODO since we inherit from Model, the name should be XGBClassifierModel
     # you can't simply inherit from sklearn. this is a well-know issue
     # https://github.com/scikit-learn/scikit-learn/issues/13555

@@ -1,6 +1,6 @@
 # import mlflow
 from src.models import Model
-from src.models.xgb import XGB
+from src.models.xgb_classifier_model import XGB
 from src.dataset import DatasetConfig, Dataset
 from src.transformers import FourierTransfomer, PhasesToNumpyTransformer
 from src.metrics import Metrics
