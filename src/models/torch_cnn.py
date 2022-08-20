@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
-from src.dataset import Dataset
-from src.dataset.sub_dataset import SubDatasetLoader
-from src.dataset.sub_dataset.sub_dataset import SubDataset
+from src.dataset.sub_dataset import SubDatasetLoader, SubDataset
 from src.models import Model
 from tqdm import tqdm
 
@@ -55,13 +53,13 @@ class TorchCNNNet:
 
 
 class TorchCNNModel(Model):
-    def __init__(self, net: TorchCNNNet, dataset: Dataset) -> None:
+    """the place where neural network (which is a bunch of parameters) meets the dataset"""
+    def __init__(self, net: TorchCNNNet) -> None:
         self.net = net
-        self.dataset = dataset
 
-    def train(self):
+    def train(self, sub_dataset: SubDataset):
         for _ in tqdm(range(1), desc="epoch", position=1):
-            loader = SubDatasetLoader(self.dataset.train, batch_size=self.net.batch_size, device=self.net.device)
+            loader = SubDatasetLoader(sub_dataset, batch_size=self.net.batch_size, device=self.net.device)
             for inputs, labels in tqdm(loader, desc="training", position=0):
                 self.net.learn(inputs, labels)
 

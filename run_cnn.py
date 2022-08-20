@@ -37,8 +37,8 @@ dataset.transform()
 net = TorchCNNNet(
     spec=CNN1DNetSpec, device="cpu", optimizer=torch.optim.Adam, criterion=nn.BCELoss, learning_rate=0.1, batch_size=10
 )
-model = TorchCNNModel(net=net, dataset=dataset)
-model.train()
+model = TorchCNNModel(net=net)
+model.train(dataset.train)
 
 metrics = Metrics(model, dataset)
 print(metrics.calculate())

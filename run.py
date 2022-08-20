@@ -26,8 +26,8 @@ dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=tran
 dataset.load()
 dataset.transform()
 
-model = XGBClassifierModel(dataset=dataset)
-model.train()
+model = XGBClassifierModel()
+model.train(dataset.train)
 
 metrics = Metrics(model, dataset)
 metrics.calculate()
