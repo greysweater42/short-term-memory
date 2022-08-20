@@ -7,3 +7,4 @@ logs.log
 *.npy
 *.pickle
 data_cache*
+dataset_cache*

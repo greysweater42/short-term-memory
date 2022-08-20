@@ -1,15 +1,9 @@
 from typing import List, Dict
 
 from pydantic import BaseModel, root_validator
-from src.dataset_info import DatasetInfo
-from itertools import product, starmap
-from collections import namedtuple
-
-
-def named_product(**items):
-    """cartesian product of several lists/sets, but each field is named by a namedtuple "Product" """
-    Product = namedtuple('Product', items.keys())
-    return starmap(Product, product(*items.values()))
+from src.survey_info import SurveyInfo
+from itertools import product
+import hashlib
 
 
 class MLMappings:
@@ -27,17 +21,22 @@ class DatasetConfig(BaseModel):
     num_letters: List[int] = [5, 6, 7]
     response_types: List[str] = ["correct", "wrong"]
     phases: List[str] = ["delay"]
-    electrodes: List[str] = DatasetInfo.electrodes
+    electrodes: List[str] = SurveyInfo.electrodes
 
     @root_validator
     def check_values(cls, values: Dict) -> int:
         for name, value in values.items():
             for subvalue in value:
-                proper_values = DatasetInfo.get(name)
+                proper_values = SurveyInfo.get(name)
                 if subvalue not in proper_values:
                     raise ValueError(f"{name} must be from the list {proper_values}; {name} is not")
-        return values
+        return {k: sorted(v) for k, v in values.items()}
 
     @property
     def combinations(self) -> product:
         return product(self.experiment_types, self.num_letters, self.response_types, self.phases)
+
+    @property
+    def md5(self):
+        """md5 of this config; uselful as if of this particular specification of dataset"""
+        return hashlib.md5(str(self).encode()).hexdigest()

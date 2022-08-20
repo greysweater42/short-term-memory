@@ -1,67 +1,64 @@
-# 
-# NOT REFACTORED YET
-# 
-from src.dataset.dataset import Dataset
-import numpy as np
-from pathlib import Path
-import torch.nn as nn
 import torch
+import torch.nn as nn
+from src.dataset.sub_dataset import SubDatasetLoader, SubDataset
+from src.models import Model
 from tqdm import tqdm
-from torchvision import models
+from dataclasses import dataclass
 
 
-class EEGDataset(torch.utils.data.Dataset):
-    def __init__(self, wavelets, labels):
-        self.x = torch.tensor(wavelets.astype(np.float32))
-        self.y = torch.tensor(labels.astype(np.float32))
+class CNN1DNet(nn.Module):
+    """specification of 1-dimensional convolutional neural network: layers and classifier"""
 
-    def __len__(self):
-        return len(self.x)
-
-    def __getitem__(self, idx):
-        return self.x[idx].repeat(3, 1, 1), self.y[idx]
-
-
-ds_t = EEGDataset(wavelets[t_wavelets], labels[t_wavelets])
-dl_t = torch.utils.data.DataLoader(ds_t, batch_size=20, shuffle=True)
-ds_v = EEGDataset(wavelets[v_wavelets], labels[v_wavelets])
-dl_v = torch.utils.data.DataLoader(ds_v, batch_size=20, shuffle=True)
-
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.model = nn.Sigmoid()
+    def __init__(self, input_channels: int = 1):
+        super().__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv1d(input_channels, 1, 10, stride=5),
+            nn.Conv1d(1, 1, 10, stride=5),
+        )
+        self.classifier = nn.Sequential(nn.Linear(9, 1), nn.Sigmoid())
 
     def forward(self, x):
-        return self.model(x)
+        x = self.cnn(x)
+        return self.classifier(x)
 
 
-class CNNModel:
-    def __init__(self) -> None:
-        self.device = "cuda"
-        self.net = Net()
-        self.net.to(self.device)
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.0001)
-        self.criterion = nn.BCELoss()
+@dataclass
+class NeuralNetwork:
+    net: nn.Module
+    device: str
+    optimizer: torch.optim
+    criterion: torch.nn.modules.loss
+    batch_size: int
+    epochs: int
 
-    def fit(self):
-        EPOCH_NUM = 5
-        for i in tqdm(range(EPOCH_NUM), desc="epoch", position=1):
-            correct_t = 0
-            for inputs, labels in tqdm(dl_t, desc="training", position=0):
-                outputs = self.net(inputs.to(self.device))
-                loss = self.criterion(outputs.view(-1), labels.float().to(self.device))
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                pred = outputs.view(-1).detach().to("cpu") > 0.5
-                correct_t += sum(pred == labels.to("cpu"))
-            print(f"\ntraining accuracy: {correct_t / len(ds_t) * 100}%")
 
-            correct_v = 0
-            for inputs, labels in tqdm(dl_v, desc="validation", position=0):
-                outputs = self.net(inputs.to(self.device))
-                pred = outputs.view(-1).detach().to("cpu") > 0.5
-                correct_v += sum(pred == labels.to("cpu"))
-            print(f"\nvalidation accuracy: {correct_v / len(ds_v) * 100}%")
+class TorchCNNModel(Model):
+    """the place where neural network (which is a bunch of parameters) meets the dataset; it can train and predict"""
+
+    def __init__(self, neural_network: NeuralNetwork) -> None:
+        self.nn = neural_network
+        self.nn.net.to(self.nn.device)
+
+    def train(self, sub_dataset: SubDataset):
+        for _ in tqdm(range(self.nn.epochs), desc="epoch", position=1):
+            loader = SubDatasetLoader(sub_dataset, batch_size=self.nn.batch_size, device=self.nn.device)
+            for inputs, labels in tqdm(loader, desc="training", position=0):
+                self._learn_one_batch(inputs, labels)
+
+    def _learn_one_batch(self, inputs: torch.Tensor, labels: torch.Tensor):
+        """neural network learns a little from given inputs and labels; by "learning" it is meant: updates parameters"""
+        outputs = self.nn.net(inputs)
+        loss = self.nn.criterion(outputs, labels)
+        self.nn.optimizer.zero_grad()
+        loss.backward()
+        self.nn.optimizer.step()
+
+    def predict(self, sub_dataset: SubDataset):
+        preds = []
+        loader = SubDatasetLoader(sub_dataset, batch_size=self.nn.batch_size, device=self.nn.device)
+        for inputs, _ in tqdm(loader):
+            preds.append(self._predict_one_batch(inputs))
+        return torch.concat(preds)
+
+    def _predict_one_batch(self, inputs: torch.Tensor) -> torch.Tensor:
+        return (self.nn.net(inputs).detach().to("cpu") > 0.5).double()

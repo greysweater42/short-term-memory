@@ -1,7 +1,18 @@
 import numpy as np
 from pydantic import BaseModel
 from src.models import Model
-from src.dataset import Dataset, TrainAndTestDataset
+from src.dataset import Dataset, SubDataset
+from typing import Union
+import torch
+
+
+def _flatten(x: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
+    if isinstance(x, np.ndarray):
+        return x.flatten()
+    elif isinstance(x, torch.Tensor):
+        return torch.flatten(x)
+    else:
+        raise Exception("x must be either np.ndarray or torch.Tensor")
 
 
 class MetricsReport(BaseModel):
@@ -16,14 +27,17 @@ class Metrics:
 
     def calculate(self):
         reports = dict()
-        for name, ds in {"train": self.dataset.train, "test": self.dataset.test}.items():
-            reports[name] = self._generate_report(ds=ds)
+        for name, sub_dataset in {"train": self.dataset.train, "test": self.dataset.test}.items():
+            reports[name] = self._generate_report(sub_dataset=sub_dataset)
         return reports
 
-    def _generate_report(self, ds: TrainAndTestDataset) -> MetricsReport:
+    def _generate_report(self, sub_dataset: SubDataset) -> MetricsReport:
+        y_hat = np.array(_flatten(self.model.predict(sub_dataset)))
+        y = np.array(_flatten(sub_dataset.y))
+
         return MetricsReport(
-            accuracy=np.mean(self.model.predict(ds.X) == ds.y),
-            samples_imbalance=ds.y.mean(),
+            accuracy=np.mean(y == y_hat),
+            samples_imbalance=y.mean(),
         )
 
 

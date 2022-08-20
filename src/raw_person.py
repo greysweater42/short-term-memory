@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from src.filter_out_noise import filter_out_noise
 
 from src.trial import Trial
-from src.dataset_info import DatasetInfo
+from src.survey_info import SurveyInfo
 from src.observation import Observation
 
 import warnings
@@ -109,7 +109,7 @@ class RawPerson:
         """each trial gets a unique id: an integer. trial is defined as a "start" event and all the events until the
         next "start" event"""
         self.events["trial_id"] = 0
-        trial_starts_cond = self.events["trial_type"].str.startswith(DatasetInfo.events["start"])
+        trial_starts_cond = self.events["trial_type"].str.startswith(SurveyInfo.events["start"])
         self.events.loc[trial_starts_cond, "trial_id"] = range(1, sum(trial_starts_cond) + 1)
         self.events["trial_id"].replace(to_replace=0, method="ffill", inplace=True)
 
