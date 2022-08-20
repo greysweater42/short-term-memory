@@ -1,117 +1,73 @@
-# 
-# NOT REFACTORED YET
-# 
-# %%
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from src.dataset import Dataset
+from src.dataset.sub_dataset import SubDatasetLoader
+from src.dataset.sub_dataset.sub_dataset import SubDataset
+from src.models import Model
 from tqdm import tqdm
 
 
-class EEGDataset(Dataset):
-    def __init__(self, path):
-        self.files = list(Path(path).rglob("*.csv"))
-        self.mapping = {"error": 0, "correct": 1}
+class CNN1DNetSpec(nn.Module):
+    """specification of 1-dimensional convolutional neural network: layers and classifier"""
 
-    def __len__(self):
-        return len(self.files)
-
-    def __getitem__(self, idx):
-        if not isinstance(idx, slice):
-            return self._get_one_item(self.files[idx])
-        else:
-            data, labels = [], []
-            for file in self.files[idx]:
-                one_data, label = self._get_one_item(file)
-                data.append(one_data)
-                labels.append(label)
-            return torch.stack(data), labels
-
-    def _get_one_item(self, file):
-        label = self.mapping[file.parent.name]
-        data = pd.read_csv(file).to_numpy()[:3000].transpose().astype(np.float32)
-        return torch.tensor(data), label
-
-    def get_weighted_sampler(self):
-        labels = [self.mapping[file.parent.name] for file in self.files]
-        counts = np.unique(labels, return_counts=True)[1]
-        weights_classes = 1 / (counts / sum(counts))
-        weights_classes /= sum(weights_classes)
-        weights = [weights_classes[x] for x in labels]
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
-        return sampler
-
-
-train_dataset = EEGDataset("/home/tomek/nauka/mne/data/train")
-test_dataset = EEGDataset("/home/tomek/nauka/mne/data/test")
-
-sampler = train_dataset.get_weighted_sampler()
-train_loader = DataLoader(train_dataset, batch_size=10, sampler=sampler)
-test_loader = DataLoader(test_dataset, batch_size=10, shuffle=True)
-
-
-class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.kernels = [50, 100, 150, 300, 500, 700, 900]
-        self.cnn_size = 184
         self.cnn = nn.Sequential(
-            nn.Conv1d(21, self.kernels[0], 3, stride=1),
-            nn.Conv1d(self.kernels[0], self.kernels[1], 3, stride=1),
-            nn.Conv1d(self.kernels[1], self.kernels[2], 3, stride=1),
-            nn.Conv1d(self.kernels[2], self.kernels[3], 5, stride=2),
-            nn.Conv1d(self.kernels[3], self.kernels[4], 5, stride=2),
-            nn.Conv1d(self.kernels[4], self.kernels[5], 5, stride=2),
-            nn.Conv1d(self.kernels[5], self.kernels[6], 5, stride=2),
+            nn.Conv1d(1, 1, 10, stride=5),
+            nn.Conv1d(1, 1, 10, stride=5),
         )
-        # data, _ = train_dataset[0]
-        # print(self.cnn(data.unsqueeze(0)).shape)
-        self.classifier = nn.Sequential(
-            nn.Linear(self.cnn_size * self.kernels[-1], 1), nn.Sigmoid()
-        )
+        self.classifier = nn.Sequential(nn.Linear(9, 1), nn.Sigmoid())
 
     def forward(self, x):
         x = self.cnn(x)
-        return self.classifier(x.view(-1, self.cnn_size * self.kernels[-1]))
+        return self.classifier(x)
 
 
-net = Net()
+class TorchCNNNet:
+    """neural network, bunch of parameters used for training with "learn" method"""
 
-# %%
-device = "cuda"
-net = Net()
-net.to(device)
-optimizer = torch.optim.Adam(net.parameters(), lr=0.1)
-criterion = nn.BCEWithLogitsLoss()
+    def __init__(
+        self,
+        spec: nn.Module,
+        device: str,
+        optimizer: torch.optim,
+        criterion: torch.nn.modules.loss,
+        learning_rate: float,
+        batch_size: int,
+    ) -> None:
+        self.device = device
+        self.batch_size = batch_size
+        self.spec = spec()
+        self.spec.to(self.device)
+        self.optimizer = optimizer(self.spec.parameters(), lr=learning_rate)
+        self.criterion = criterion()
 
-
-for i in tqdm(range(5), desc="epoch", position=1):
-    correct = 0
-    for inputs, labels in tqdm(train_loader, desc="training", position=0):
-        outputs = net(inputs.to(device))
-        loss = criterion(outputs.view(-1), labels.float().to(device))
-        optimizer.zero_grad()
+    def learn(self, inputs: torch.Tensor, labels: torch.Tensor):
+        """neural network learns a little from given inputs and labels; by "learning" it is meant: updates parameters"""
+        outputs = self.spec(inputs)
+        loss = self.criterion(outputs, labels)
+        self.optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
-        correct += sum(outputs.view(-1).to("cpu") == labels.to("cpu"))
-    print(f"\ntraining accuracy: {correct / len(train_dataset) * 100}%")
+        self.optimizer.step()
 
-    # correct = 0
-    # for inputs, labels in tqdm(test_loader, desc="testing"):
-    #     outputs = net(inputs.to(device))
-    #     correct += sum(outputs.view(-1).to("cpu") == labels.to("cpu"))
-    # print(f"\ntesting accuracy: {correct / len(test_dataset) * 100}%")
-    # print(f"all positives accuracy: {848 / (848 + 96)}")
+    def predict(self, inputs: torch.Tensor) -> torch.Tensor:
+        return (self.spec(inputs).detach().to("cpu") > 0.5).double()
 
 
-# %%
+class TorchCNNModel(Model):
+    def __init__(self, net: TorchCNNNet, dataset: Dataset) -> None:
+        self.net = net
+        self.dataset = dataset
 
-# train_path = "/home/tomek/nauka/mne/data/train"
-# test_path = "/home/tomek/nauka/mne/data/test"
+    def train(self):
+        for _ in tqdm(range(1), desc="epoch", position=1):
+            loader = SubDatasetLoader(self.dataset.train, batch_size=self.net.batch_size, device=self.net.device)
+            for inputs, labels in tqdm(loader, desc="training", position=0):
+                self.net.learn(inputs, labels)
 
-# files = list(Path(test_path).rglob("*.csv"))
-# np.unique(np.array([path.parent.name for path in files]), return_counts=True)
+    def predict(self, sub_dataset: SubDataset):
+        preds = []
+        loader = SubDatasetLoader(sub_dataset, batch_size=self.net.batch_size, device=self.net.device)
+        for inputs, _ in tqdm(loader):
+            preds.append(self.net.predict(inputs))
+        return torch.concat(preds)

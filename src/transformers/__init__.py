@@ -4,3 +4,4 @@ from .observations_to_numpy_transformer import ObservationsToNumpyTransformer
 
 from .observations.fourier_transformer import FourierTransfomer
 from .observations.frequency_transformer import FrequencyTransformer
+from .numpy_to_torch_transformer import NumpyToTorchTransformer

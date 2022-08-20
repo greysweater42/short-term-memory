@@ -2,14 +2,7 @@ from typing import List, Dict
 
 from pydantic import BaseModel, root_validator
 from src.dataset_info import DatasetInfo
-from itertools import product, starmap
-from collections import namedtuple
-
-
-def named_product(**items):
-    """cartesian product of several lists/sets, but each field is named by a namedtuple "Product" """
-    Product = namedtuple('Product', items.keys())
-    return starmap(Product, product(*items.values()))
+from itertools import product
 
 
 class MLMappings:

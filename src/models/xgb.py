@@ -1,13 +1,13 @@
-from src.dataset import Dataset
+from src.dataset import Dataset, SubDataset
 import xgboost
 import numpy as np
-import pandas as pd
 
 from .model import Model
 from src.utils import timeit
 
 
 class XGBClassifier(Model):
+    # TODO since we inherit from Model, the name should be XGBClassifierModel
     # you can't simply inherit from sklearn. this is a well-know issue
     # https://github.com/scikit-learn/scikit-learn/issues/13555
     def __init__(self, dataset: Dataset, *args, **kwargs) -> None:
@@ -19,8 +19,8 @@ class XGBClassifier(Model):
         # TODO to be consistent with predict method, dataset could be provided as the arguments to train
         self.model.fit(self.dataset.train.X, self.dataset.train.y)
 
-    def predict(self, X: pd.DataFrame) -> np.array:
-        return self.model.predict(X)
+    def predict(self, sub_dataset: SubDataset) -> np.array:
+        return self.model.predict(sub_dataset.X)
 
 # def main(X, y):
 #     from sklearn import svm
