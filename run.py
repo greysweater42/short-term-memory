@@ -1,4 +1,4 @@
-from src.dataset import Dataset, DatasetConfig
+from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
 from src.models.xgb import XGBClassifier
 from src.metrics import Metrics
@@ -22,7 +22,7 @@ transformers = [
     FrequencyTransformer(freqs_to_remove=[(0, 10), (50, 500)]),
     ObservationsToNumpyTransformer(),
 ]
-dataset = Dataset(config=dataset_config, transformers=transformers)
+dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=transformers)
 dataset.load()
 dataset.transform()
 

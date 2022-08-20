@@ -1,4 +1,4 @@
-from src.dataset import Dataset, DatasetConfig
+from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
 from src.models.torch_cnn import TorchCNNModel, CNN1DNetSpec, TorchCNNNet
 from src.metrics import Metrics
@@ -30,7 +30,7 @@ transformers = [
     ObservationsToNumpyTransformer(),
     NumpyToTorchTransformer(),
 ]
-dataset = Dataset(config=dataset_config, transformers=transformers)
+dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=transformers)
 dataset.load()
 dataset.transform()
 
