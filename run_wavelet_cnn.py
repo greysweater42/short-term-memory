@@ -37,7 +37,7 @@ dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=tran
 dataset.load()
 dataset.transform()
 
-net = CNN1DNet(input_channels=len(freqs))
+net = CNN1DNet(linear_input_channels=dataset.X.shape[-1], input_channels=len(freqs))
 neural_network = NeuralNetwork(
     net=net,
     device="cpu",

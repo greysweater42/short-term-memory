@@ -32,4 +32,4 @@ model = XGBClassifierModel()
 model.train(dataset.train)
 
 metrics = Metrics(model, dataset)
-metrics.calculate()
+print(metrics.calculate())

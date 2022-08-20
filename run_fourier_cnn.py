@@ -11,7 +11,7 @@ from src.transformers import (
     FrequencyTransformer,
     LabelTransformer,
     NumpyToTorchTransformer,
-    ObservationsToNumpyTransformer,
+    EEGToNumpyTransformer
 )
 
 
@@ -30,15 +30,14 @@ transformers = [
     LabelTransformer(),
     FourierTransfomer(),
     FrequencyTransformer(freqs_to_remove=[(0, 10), (50, 500)]),
-    ObservationsToNumpyTransformer(),
+    EEGToNumpyTransformer(),
     NumpyToTorchTransformer(),
 ]
 dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=transformers)
 dataset.load()
 dataset.transform()
 
-
-net = CNN1DNet(input_channels=1)
+net = CNN1DNet(linear_input_channels=dataset.X.shape[-1], input_channels=1)
 neural_network = NeuralNetwork(
     net=net,
     device="cpu",
