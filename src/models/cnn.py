@@ -9,13 +9,11 @@ from dataclasses import dataclass
 class CNN1DNet(nn.Module):
     """specification of 1-dimensional convolutional neural network: layers and classifier"""
 
-    def __init__(self, input_channels: int = 1):
+    def __init__(self, linear_input_channels: int, input_channels: int = 1):
         super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(input_channels, 1, 10, stride=5),
-            nn.Conv1d(1, 1, 10, stride=5),
-        )
-        self.classifier = nn.Sequential(nn.Linear(9, 1), nn.Sigmoid())
+        # TODO this is now the simplest convolutional layer possible. needless to say, it needs some upgrades
+        self.cnn = nn.Conv1d(input_channels, 1, 9, padding=4)
+        self.classifier = nn.Sequential(nn.Linear(linear_input_channels, 1), nn.Sigmoid())
 
     def forward(self, x):
         x = self.cnn(x)
