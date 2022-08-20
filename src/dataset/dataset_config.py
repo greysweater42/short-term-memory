@@ -37,7 +37,7 @@ class DatasetConfig(BaseModel):
     @property
     def combinations(self) -> product:
         """all possible combinations of parameters of DatasetConfig"""
-        return product(self.experiment_types, self.num_letters, self.response_types, self.phases)
+        return product(self.experiment_types, self.num_letters, self.response_types, self.phases, self.electrodes)
 
     @property
     def md5(self):

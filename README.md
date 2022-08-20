@@ -9,3 +9,7 @@ The idea is to
 - and then input it into a convolutional or recurrent artifical neural network.
 
 So far, none of these methods brought a satisfactory predictive model.
+
+
+dictionary:
+- channel - electrode

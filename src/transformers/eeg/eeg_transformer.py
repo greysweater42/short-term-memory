@@ -2,6 +2,7 @@ from ..transformer import Transformer
 from src.observation import Observation
 from typing import List, Tuple
 import numpy as np
+import pandas as pd
 
 
 class EEGTransformer(Transformer):
@@ -13,3 +14,6 @@ class EEGTransformer(Transformer):
         for observation in observations:
             observation.eeg = self._transform_single_channel(observation.eeg.iloc[:common_length])
         return observations, y
+
+    def _transform_single_channel(self, eeg: pd.Series) -> pd.Series:
+        return eeg

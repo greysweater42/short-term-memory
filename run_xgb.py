@@ -6,20 +6,19 @@ from src.models import XGBClassifierModel
 from src.transformers import FourierTransfomer, FrequencyTransformer, LabelTransformer, EEGToNumpyTransformer
 
 
-
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 dataset_config = DatasetConfig(
-    experiment_types=["R"],
+    experiment_types=["R", "M"],
     num_letters=[5],
-    response_types=["wrong", "correct"],
+    response_types=["correct"],
     phases=["delay"],
     electrodes=["T4"],
 )
 
 transformers = [
-    LabelTransformer(),
+    LabelTransformer(label="experiment_type"),
     FourierTransfomer(),
     FrequencyTransformer(freqs_to_remove=[(0, 10), (50, 500)]),
     EEGToNumpyTransformer(),

@@ -5,8 +5,7 @@ from .eeg_transformer import EEGTransformer
 
 
 class FourierTransfomer(EEGTransformer):
-    """transforms a given signal from time domain to frequency domain using Fourier transform;
-    possible postprocessing with low and high bound filters and smoothing"""
+    """transforms a given eeg signal from time domain to frequency domain using Fourier transform"""
 
     def _transform_single_channel(self, x: pd.Series) -> pd.Series:
         # more details on fourier transform in Python:

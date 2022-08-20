@@ -7,8 +7,8 @@ from src.observation import Observation
 
 
 class SubDataset:
-    """sub meaning: train or test; keeps indexes of observations, which are labeled as train or test; provides acces to
-    X and y for either train or test dataset"""
+    """'sub' meaning: train or test; keeps indexes of observations, which are labeled as train or test; provides access
+    to X and y for both train or test datasets"""
 
     train_samples_idxs: np.ndarray = None
     test_sample_idxs: np.ndarray = None

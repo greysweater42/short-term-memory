@@ -19,16 +19,16 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 dataset_config = DatasetConfig(
-    experiment_types=["R"],
+    experiment_types=["R", "M"],
     num_letters=[5],
-    response_types=["wrong", "correct"],
+    response_types=["correct"],
     phases=["delay"],
     electrodes=["T4"],
 )
 
 freqs = np.array([6, 10.5, 19, 42.5])
 transformers = [
-    LabelTransformer(),
+    LabelTransformer(label="experiment_type"),
     WaveletTransformer(freqs=freqs),
     EEGToNumpyTransformer(),
     NumpyToTorchTransformer(),

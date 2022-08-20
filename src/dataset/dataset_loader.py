@@ -11,6 +11,7 @@ from .dataset_config import DatasetConfig
 
 
 class DatasetLoader:
+    """reads data for a given DatasetConfig; for efficiency stores data in cache for a given config"""
     def __init__(self, config: DatasetConfig, from_cache: bool = True) -> None:
         self.from_cache = from_cache
         self.config = config
@@ -47,6 +48,8 @@ class DatasetLoader:
             num_letters=combination[1],
             response_type=combination[2],
             name=combination[3],
+            electrode=combination[4]
         )
+        # observation_path can be sth like "data_cache/*/5/M/correct/*/delay/T6.feather"
         paths = Path().rglob(str(observation_path))
         return [Observation.from_path(path) for path in paths]
