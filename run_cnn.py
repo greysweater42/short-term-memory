@@ -1,6 +1,6 @@
 from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
-from src.models.torch_cnn import TorchCNNModel, CNN1DNet, NeuralNetwork
+from src.models.cnn import TorchCNNModel, CNN1DNet, NeuralNetwork
 from src.metrics import Metrics
 import torch
 import torch.nn as nn
