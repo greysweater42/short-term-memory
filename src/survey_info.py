@@ -41,10 +41,9 @@ ELECTRODES = [
 ]
 
 
-class DatasetInfo:
+class SurveyInfo:
     """possible values for each of the dataset parameters"""
 
-    # TODO this class can be confused with Dataset. it should be called SurveyInfo or MetaInfo, maybe
     experiment_types: List[int] = ["M", "R"]
     num_letters: List[int] = [5, 6, 7]
     response_types: List[str] = ["correct", "wrong"]

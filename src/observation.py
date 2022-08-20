@@ -3,7 +3,7 @@ from pydantic import BaseModel, validator, root_validator, ValidationError
 import pandas as pd
 from config import DATA_CACHE_PATH
 from typing import Dict, Any
-from src.dataset_info import DatasetInfo
+from src.survey_info import SurveyInfo
 from src.utils import pluralize
 import numpy as np
 
@@ -25,8 +25,8 @@ class Observation(BaseModel):
 
     @validator("name")
     def check_name(cls, name: str):
-        if name not in DatasetInfo.phases:
-            raise ValidationError(f"name should be one of {list(DatasetInfo.phases)}; {name} is none of these")
+        if name not in SurveyInfo.phases:
+            raise ValidationError(f"name should be one of {list(SurveyInfo.phases)}; {name} is none of these")
         return name
 
     @root_validator
@@ -34,7 +34,7 @@ class Observation(BaseModel):
         list_fields_to_validate = ["num_letters", "experiment_type", "response_type", "electrode"]
         list_values = {name: values[name] for name in values if name in list_fields_to_validate}
         for name, value in list_values.items():
-            proper_values = DatasetInfo.get(pluralize(name))
+            proper_values = SurveyInfo.get(pluralize(name))
             if value not in proper_values:
                 raise ValidationError(f"{name} must be from the list {proper_values}; {name} is not")
         return values

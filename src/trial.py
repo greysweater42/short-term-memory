@@ -4,7 +4,7 @@ import pandas as pd
 
 from src.phase import Phase
 from src.observation import Observation
-from src.dataset_info import DatasetInfo
+from src.survey_info import SurveyInfo
 from pydantic import ValidationError
 
 
@@ -26,9 +26,9 @@ class Trial:
     @staticmethod
     def _check_is_trial_df_valid(trial_df: pd.DataFrame) -> bool:
         """checks if a given raw trial dataframe has errors, e.g. wrong number or order of events"""
-        if len(trial_df) != len(DatasetInfo.events):
+        if len(trial_df) != len(SurveyInfo.events):
             raise InvalidTrialDF
-        for event_data, event_expected in zip(trial_df["trial_type"], DatasetInfo.events.values()):
+        for event_data, event_expected in zip(trial_df["trial_type"], SurveyInfo.events.values()):
             if not event_data.startswith(event_expected):
                 raise InvalidTrialDF
 
@@ -39,10 +39,10 @@ class Trial:
         response_type = self.get_trial_response(rows["response"]["trial_type"].iloc[0])
 
         self.observations: List[Observation] = []
-        for phase_name, (event_start, event_end) in DatasetInfo.phases.items():
+        for phase_name, (event_start, event_end) in SurveyInfo.phases.items():
             start = rows[event_start].index[0]
             end = rows[event_end].index[0]
-            for electrode in DatasetInfo.electrodes:
+            for electrode in SurveyInfo.electrodes:
                 observation = Observation(
                     name=phase_name,
                     trial_id=self.trial_id,
@@ -59,7 +59,7 @@ class Trial:
     def _change_trial_df_to_dict_of_rows(self) -> Dict[str, pd.Series]:
         """for convenience: it will be easier to access specific rows by their "name", not .startswith"""
         rows = {}
-        for name, startswith in DatasetInfo.events.items():
+        for name, startswith in SurveyInfo.events.items():
             rows[name] = self.trial_df[self.trial_df["trial_type"].str.startswith(startswith)]
         return rows
 
