@@ -1,16 +1,17 @@
-from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
-from src.metrics import Metrics
-from src.models.cnn import TorchCNNModel, CNN1DNet, NeuralNetwork
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
-
+from src.dataset import Dataset, DatasetConfig, DatasetLoader
+from src.metrics import Metrics
+from src.models.cnn import CNN1DNet, NeuralNetwork, TorchCNNModel
 from src.transformers import (
-    WaveletTransformer,
-    ObservationsToNumpyTransformer,
+    LabelTransformer,
     NumpyToTorchTransformer,
+    EEGToNumpyTransformer,
+    WaveletTransformer,
 )
 
 
@@ -27,8 +28,9 @@ dataset_config = DatasetConfig(
 
 freqs = np.array([6, 10.5, 19, 42.5])
 transformers = [
+    LabelTransformer(),
     WaveletTransformer(freqs=freqs),
-    ObservationsToNumpyTransformer(),
+    EEGToNumpyTransformer(),
     NumpyToTorchTransformer(),
 ]
 dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=transformers)

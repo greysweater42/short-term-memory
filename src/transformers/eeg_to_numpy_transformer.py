@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 
-class ObservationsToNumpyTransformer(Transformer):
+class EEGToNumpyTransformer(Transformer):
 
     @staticmethod
     def transform(observations: List[Observation], y: np.ndarray) -> List[pd.Series]:

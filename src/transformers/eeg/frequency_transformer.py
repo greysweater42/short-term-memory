@@ -2,10 +2,10 @@
 import pandas as pd
 import numpy as np
 from typing import List, Tuple
-from .observations_transformer import ObservationsTransformer
+from .eeg_transformer import EEGTransformer
 
 
-class FrequencyTransformer(ObservationsTransformer):
+class FrequencyTransformer(EEGTransformer):
     """applies several cleaning techniques on data in frequency domain, i.e. already transformed by Fourier transform:
     removes specific frequencies (e.g. high and low), smoothenes the series with a moving average and applies stride: 
     selects every k-th element of the series, which lowers its resolution """

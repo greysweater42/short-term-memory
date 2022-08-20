@@ -1,15 +1,17 @@
-from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
-from src.models.cnn import TorchCNNModel, CNN1DNet, NeuralNetwork
-from src.metrics import Metrics
+
 import torch
 import torch.nn as nn
 
+from src.dataset import Dataset, DatasetConfig, DatasetLoader
+from src.metrics import Metrics
+from src.models.cnn import CNN1DNet, NeuralNetwork, TorchCNNModel
 from src.transformers import (
     FourierTransfomer,
     FrequencyTransformer,
-    ObservationsToNumpyTransformer,
+    LabelTransformer,
     NumpyToTorchTransformer,
+    ObservationsToNumpyTransformer,
 )
 
 
@@ -25,6 +27,7 @@ dataset_config = DatasetConfig(
 )
 
 transformers = [
+    LabelTransformer(),
     FourierTransfomer(),
     FrequencyTransformer(freqs_to_remove=[(0, 10), (50, 500)]),
     ObservationsToNumpyTransformer(),
@@ -42,7 +45,7 @@ neural_network = NeuralNetwork(
     optimizer=torch.optim.Adam(net.parameters(), lr=0.1),
     criterion=nn.BCELoss(),
     batch_size=10,
-    epochs=1
+    epochs=1,
 )
 
 model = TorchCNNModel(neural_network=neural_network)

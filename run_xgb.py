@@ -1,9 +1,10 @@
-from src.dataset import Dataset, DatasetConfig, DatasetLoader
 import logging
-from src.models import XGBClassifierModel
-from src.metrics import Metrics
 
-from src.transformers import FourierTransfomer, FrequencyTransformer, ObservationsToNumpyTransformer
+from src.dataset import Dataset, DatasetConfig, DatasetLoader
+from src.metrics import Metrics
+from src.models import XGBClassifierModel
+from src.transformers import FourierTransfomer, FrequencyTransformer, LabelTransformer, EEGToNumpyTransformer
+
 
 
 logger = logging.getLogger()
@@ -18,9 +19,10 @@ dataset_config = DatasetConfig(
 )
 
 transformers = [
+    LabelTransformer(),
     FourierTransfomer(),
     FrequencyTransformer(freqs_to_remove=[(0, 10), (50, 500)]),
-    ObservationsToNumpyTransformer(),
+    EEGToNumpyTransformer(),
 ]
 dataset = Dataset(loader=DatasetLoader(config=dataset_config), transformers=transformers)
 dataset.load()

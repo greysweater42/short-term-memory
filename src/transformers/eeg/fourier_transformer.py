@@ -1,10 +1,10 @@
 import pandas as pd
 from scipy.fft import fft, fftfreq
 import numpy as np
-from .observations_transformer import ObservationsTransformer
+from .eeg_transformer import EEGTransformer
 
 
-class FourierTransfomer(ObservationsTransformer):
+class FourierTransfomer(EEGTransformer):
     """transforms a given signal from time domain to frequency domain using Fourier transform;
     possible postprocessing with low and high bound filters and smoothing"""
 

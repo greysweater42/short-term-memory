@@ -4,7 +4,7 @@ from typing import List, Tuple
 import numpy as np
 
 
-class ObservationsTransformer(Transformer):
+class EEGTransformer(Transformer):
     """transformer applied independently on eeg from every given observation"""
 
     def transform(self, observations: List[Observation], y: np.ndarray) -> Tuple[List[Observation], np.ndarray]:
