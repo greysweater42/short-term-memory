@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def write_raw_persons_to_cache():
-    # TODO docstring
+    """reads the raw data, processes it and saves the processed files into a given directory"""
     # TODO there should be a console API (in click) to run this function
     # TODO this api could also have a function for downloading data
     for path in config.DATA_RAW_PATH.iterdir():
@@ -50,24 +50,30 @@ class RawPerson:
     https://en.wikipedia.org/wiki/10%E2%80%9320_system_%28EEG%29#/media/File:21_electrodes_of_International_10-20_system_for_EEG.svg
     - trial - part of the survey when a person is e.g. presented with letters and tries to memorize it and answer; there
     are many trials for a person
+    - phase - each trial is divided into phases: preparation, encoding (reading the letters), delay etc.
+    - events - they separate phases; they are stored in separate files
+    - observation - during each phase voltage from 21 electrodes is recorded; one such signal is called an
+    "observation", since it is the smallest piece of data to be worked on
     """
 
-    def __init__(self, person_id: int):
+    def __init__(self, person_id: int, cpus: int = 4):
         self.person_id: int = person_id
         self.eeg: pd.DataFrame = None  # time (measurement every 2ms) in rows, channels in columns
         self.events: pd.DataFrame = None
         self.observations: List[Observation] = None
+        self.cpus = 4
 
     @timeit
     def load(self):
         """loads raw data into self.data and applies basic preprocessing"""
         self._read()
-        # self._apply_filters()
+        self._apply_filters()
         self._extract_observations_from_trials()
 
     @timeit
     def _read(self):
-        # data are stored in several files, which are interconnected
+        """reads into memory all the data concerning one person; they are stored in several files: channels, eeg and 
+        events; these files are interconnected """
         person_str = f"sub-{self.person_id:03}"
         path = config.DATA_RAW_PATH / person_str / "eeg"
 
@@ -84,8 +90,9 @@ class RawPerson:
 
     @timeit
     def _apply_filters(self):
+        """filters out obvious noise: line current frequencies (50Hz in Europe)"""
         filtered_eeg: List[pd.Series] = []
-        with Pool(config.CPUs) as executor:
+        with Pool(self.cpus) as executor:
             # .imap_unordered is slightly faster that .imap, which uses less memory than .map
             results = executor.imap_unordered(filter_out_noise, [self.eeg[channel] for channel in self.eeg.columns])
             for result in results:
@@ -98,7 +105,7 @@ class RawPerson:
         self.observations: List[Observation] = []  # resets observations
 
         all_kwargs = self._prepare_kwargs_for_multiprocessing()
-        with Pool(config.CPUs) as executor:
+        with Pool(self.cpus) as executor:
             trials_tasks = [
                 executor.apply_async(partial(Trial.extract_observations_from_args, **kwargs)) for kwargs in all_kwargs
             ]
@@ -114,6 +121,7 @@ class RawPerson:
         self.events["trial_id"].replace(to_replace=0, method="ffill", inplace=True)
 
     def _prepare_kwargs_for_multiprocessing(self) -> List[Dict]:
+        """raw data must be specifically divided by trials so it could be passed on to observation extractor"""
         all_kwargs: List[Dict] = []
         for trial_id, trial_df in self.events.groupby("trial_id"):
             start = trial_df.index.min()
@@ -124,7 +132,9 @@ class RawPerson:
 
     @timeit
     def save_observations(self):
-        with Pool(config.CPUs) as executor:
-            results = executor.imap(Observation.save, self.observations)
-            for result in results:
-                result
+        with Pool(self.cpus) as pool:
+            pool.imap(Observation.save, self.observations)
+            # closing before joining may seem counterintuitive, but it is described in the docs
+            # https://stackoverflow.com/a/38271957
+            pool.close()
+            pool.join()
