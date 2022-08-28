@@ -36,8 +36,12 @@ In order to run the analysis, you need to:
 
 - !tests!
 
-- plotting wavelet transform, just as in the paper
+- plotting wavelet transform, just as in the paper - this requires a 2-dimensional moving average, which has different k coefficient for high and low frequencies; preferably different coefficients for each frequency. 
 
 - joining phases: encoding and delay
 
 - explorartory data analysis, in partcular: differences in wavelengths between persons
+
+- keeping data in mongo db could be cleaner and faster. Would also make an obvious place to keep semi-processed data and refactor RawPerson into a transformer. The whole process would be more cohesive.
+
+-resurrect mlflow
